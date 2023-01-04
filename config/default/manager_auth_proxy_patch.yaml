@@ -41,4 +41,4 @@ spec:
         - "--cluster-namespace="
         - "--cluster-name="
         - "--cluster-type="
-        - "--run-mode=do-not-send-reports"
+        - "--run-mode=do-not-send-updates"
