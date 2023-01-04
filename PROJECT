@@ -1,0 +1,12 @@
+domain: projectsveltos.io
+layout:
+- go.kubebuilder.io/v3
+projectname: manager
+repo: github.com/projectsveltos/drift-detection-manager
+resources:
+- controller: true
+  domain: projectsveltos.io
+  group: lib.projectsveltos.io
+  kind: ResourceSummary
+  version: v1alpha1
+version: "3"
