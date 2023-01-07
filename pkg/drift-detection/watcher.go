@@ -68,7 +68,8 @@ func (m *manager) react(gvk *schema.GroupVersionKind, obj interface{},
 			resourceSummary := resourceSummaries[i]
 
 			logger.V(logsettings.LogInfo).Info(
-				fmt.Sprintf("Resource in ResourceSummary %s potentially drifted", resourceSummary.Name))
+				fmt.Sprintf("Resource in ResourceSummary %s potentially drifted (%s %s/%s)",
+					resourceSummary.Name, objRef.Kind, objRef.Namespace, objRef.Name))
 
 			// Potential configuration drift here. Queue resource (along with its hash and ResourceSummaries)
 			// to be evaluated. This operation happens in a separate context where errors can be retried.
@@ -90,7 +91,8 @@ func (m *manager) react(gvk *schema.GroupVersionKind, obj interface{},
 			resourceSummary := resourceSummaries[i]
 
 			logger.V(logsettings.LogInfo).Info(
-				fmt.Sprintf("Resource in ResourceSummary %s potentially drifted", resourceSummary.Name))
+				fmt.Sprintf("Resource in ResourceSummary %s potentially drifted (%s %s/%s)",
+					resourceSummary.Name, objRef.Kind, objRef.Namespace, objRef.Name))
 
 			// Potential configuration drift here. Queue resource (along with its hash and ResourceSummaries)
 			// to be evaluated. This operation happens in a separate context where errors can be retried.
