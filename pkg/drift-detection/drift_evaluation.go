@@ -63,7 +63,9 @@ func (m *manager) evaluateConfigurationDrift(ctx context.Context) {
 			logger := m.log.WithValues("resource", fmt.Sprintf("%s/%s", resources[i].Namespace, resources[i].Name))
 			logger = logger.WithValues("gvk", resources[i].GroupVersionKind())
 			logger.V(logs.LogDebug).Info("requeuing resource for evaluation")
+			m.mu.Lock()
 			m.checkForConfigurationDrift(&resources[i])
+			m.mu.Unlock()
 		}
 
 		// Sleep before next evaluation

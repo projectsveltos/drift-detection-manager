@@ -247,7 +247,7 @@ func (m *manager) stillTrackingResource(resourceRef *corev1.ObjectReference) boo
 		return true
 	}
 
-	_, ok := m.helmResources[*resourceRef]
+	_, ok := m.resources[*resourceRef]
 	return ok
 }
 
@@ -325,15 +325,16 @@ func (m *manager) unstructuredHash(u *unstructured.Unstructured) []byte {
 		config += render.AsCode(content["spec"])
 	}
 
+	if _, ok := content["rules"]; ok {
+		config += render.AsCode(content["rules"])
+	}
+
 	h.Write([]byte(config))
 	return h.Sum(nil)
 }
 
 // checkForConfigurationDrift queue resource to be evaluated for configuration drift
 func (m *manager) checkForConfigurationDrift(resourceRef *corev1.ObjectReference) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	m.jobQueue.Insert(resourceRef)
 }
 
