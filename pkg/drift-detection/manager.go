@@ -258,6 +258,7 @@ func (m *manager) stopTrackingResource(resourceRef *corev1.ObjectReference) {
 
 	gvk := resourceRef.GroupVersionKind()
 	if _, ok := m.gvkResources[gvk]; ok {
+
 		m.gvkResources[gvk].Erase(resourceRef)
 		if m.gvkResources[gvk].Len() == 0 {
 			logger := m.log.WithValues("gvk", gvk.String())
