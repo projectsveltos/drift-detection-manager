@@ -59,6 +59,9 @@ func (m *manager) react(gvk *schema.GroupVersionKind, obj interface{},
 		Name:       name,
 	}
 
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	if v, ok := m.resources[*objRef]; ok {
 		resourceSummaries := v.Items()
 		for i := range resourceSummaries {
@@ -76,7 +79,7 @@ func (m *manager) react(gvk *schema.GroupVersionKind, obj interface{},
 
 			m.checkForConfigurationDrift(objRef)
 
-			// Queuing once is enought
+			// Queuing once is enough
 			return
 		}
 	}
