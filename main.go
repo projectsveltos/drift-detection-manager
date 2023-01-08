@@ -79,7 +79,12 @@ func main() {
 		libsveltosv1alpha1.ComponentDriftDetectionManager, ctrl.Log.WithName("log-setter"),
 		ctrl.GetConfigOrDie())
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	// Double default values
+	cfg := ctrl.GetConfigOrDie()
+	cfg.Burst = 60
+	cfg.QPS = 40
+
+	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
 		Scheme:                 scheme,
 		MetricsBindAddress:     metricsAddr,
 		Port:                   9443,
