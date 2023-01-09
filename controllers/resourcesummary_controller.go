@@ -157,7 +157,7 @@ func (r *ResourceSummaryReconciler) reconcileDelete(
 		controllerutil.RemoveFinalizer(resourceSummary, libsveltosv1alpha1.ResourceSummaryFinalizer)
 	}
 
-	logger.V(logs.LogInfo).Info("reconciliation succeeded")
+	logger.V(logs.LogInfo).Info("reconciliation delete succeeded")
 	return ctrl.Result{}, nil
 }
 
