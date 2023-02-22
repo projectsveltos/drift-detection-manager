@@ -29,7 +29,7 @@ BIN_DIR := bin
 GOBUILD=go build
 
 # Define Docker related variables.
-REGISTRY ?= gianlucam76
+REGISTRY ?= projectsveltos
 IMAGE_NAME ?= drift-detection-manager
 ARCH ?= amd64
 OS ?= $(shell uname -s | tr A-Z a-z)
@@ -238,8 +238,8 @@ deploy-projectsveltos: $(KUSTOMIZE)
 	$(MAKE) load-image
 	
 	@echo 'Install libsveltos CRDs'
-	$(KUBECTL) apply -f https://raw.githubusercontent.com/projectsveltos/libsveltos/main/config/crd/bases/lib.projectsveltos.io_debuggingconfigurations.yaml
-	$(KUBECTL) apply -f https://raw.githubusercontent.com/projectsveltos/libsveltos/main/config/crd/bases/lib.projectsveltos.io_resourcesummaries.yaml
+	$(KUBECTL) apply -f https://raw.githubusercontent.com/projectsveltos/libsveltos/$(TAG)/config/crd/bases/lib.projectsveltos.io_debuggingconfigurations.yaml
+	$(KUBECTL) apply -f https://raw.githubusercontent.com/projectsveltos/libsveltos/$(TAG)/config/crd/bases/lib.projectsveltos.io_resourcesummaries.yaml
 
 	# Install projectsveltos drift-detection-manager component
 	@echo 'Install projectsveltos drift-detection-manager component'
