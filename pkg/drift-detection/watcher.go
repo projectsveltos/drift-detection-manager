@@ -192,6 +192,8 @@ func (m *manager) runInformer(stopCh <-chan struct{}, s cache.SharedIndexInforme
 			react(gvk, newObj, logger)
 		},
 	}
-	s.AddEventHandler(handlers)
+	if _, err := s.AddEventHandler(handlers); err != nil {
+		panic(1)
+	}
 	s.Run(stopCh)
 }
