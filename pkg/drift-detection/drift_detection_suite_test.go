@@ -33,7 +33,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/klog/v2"
 	"sigs.k8s.io/cluster-api/util"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/projectsveltos/drift-detection-manager/internal/test/helpers"
@@ -71,6 +73,8 @@ func TestControllers(t *testing.T) {
 var _ = BeforeSuite(func() {
 	By("bootstrapping test environment")
 
+	ctrl.SetLogger(klog.Background())
+
 	ctx, cancel = context.WithCancel(context.TODO())
 
 	var err error
@@ -100,6 +104,8 @@ var _ = BeforeSuite(func() {
 	Expect(err).To(BeNil())
 	Expect(testEnv.Create(ctx, dcCRD)).To(Succeed())
 	Expect(waitForObject(ctx, testEnv.Client, dcCRD)).To(Succeed())
+
+	time.Sleep(time.Second)
 
 	if synced := testEnv.GetCache().WaitForCacheSync(ctx); !synced {
 		time.Sleep(time.Second)
