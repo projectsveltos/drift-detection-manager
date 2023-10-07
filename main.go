@@ -29,15 +29,22 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/spf13/pflag"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
+	"k8s.io/client-go/rest"
 	cliflag "k8s.io/component-base/cli/flag"
 	"k8s.io/klog/v2"
+	"k8s.io/klog/v2/klogr"
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 
 	"github.com/projectsveltos/drift-detection-manager/controllers"
 	driftdetection "github.com/projectsveltos/drift-detection-manager/pkg/drift-detection"
 	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
+	"github.com/projectsveltos/libsveltos/lib/clusterproxy"
 	"github.com/projectsveltos/libsveltos/lib/logsettings"
 	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
 	//+kubebuilder:scaffold:imports
@@ -45,17 +52,19 @@ import (
 
 const (
 	noUpdates = "do-not-send-updates"
+
+	managedCluster = "managed-cluster"
 )
 
 var (
-	setupLog             = ctrl.Log.WithName("setup")
-	metricsAddr          string
-	enableLeaderElection bool
-	probeAddr            string
-	runMode              string
-	clusterNamespace     string
-	clusterName          string
-	clusterType          string
+	setupLog         = ctrl.Log.WithName("setup")
+	metricsAddr      string
+	probeAddr        string
+	runMode          string
+	deployedCluster  string
+	clusterNamespace string
+	clusterName      string
+	clusterType      string
 )
 
 func main() {
@@ -75,33 +84,25 @@ func main() {
 
 	ctx := ctrl.SetupSignalHandler()
 
-	logsettings.RegisterForLogSettings(ctx,
-		libsveltosv1alpha1.ComponentDriftDetectionManager, ctrl.Log.WithName("log-setter"),
-		ctrl.GetConfigOrDie())
-
-	// Double default values
 	cfg := ctrl.GetConfigOrDie()
+	if deployedCluster != managedCluster {
+		// if drift-detection-manager is running in the management cluster, get the kubeconfig
+		// of the managed cluster
+		cfg = getManagedClusterRestConfig(ctx, cfg, ctrl.Log.WithName("get-kubeconfig"))
+	}
 	cfg.Burst = 60
 	cfg.QPS = 40
+
+	logsettings.RegisterForLogSettings(ctx,
+		libsveltosv1alpha1.ComponentDriftDetectionManager, ctrl.Log.WithName("log-setter"),
+		cfg)
 
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
 		Scheme:                 scheme,
 		MetricsBindAddress:     metricsAddr,
 		Port:                   9443,
 		HealthProbeBindAddress: probeAddr,
-		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "563581df.projectsveltos.io",
-		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
-		// when the Manager ends. This requires the binary to immediately end when the
-		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly
-		// speeds up voluntary leader transitions as the new leader don't have to wait
-		// LeaseDuration time first.
-		//
-		// In the default scaffold provided, the program ends immediately after
-		// the manager stops, so would be fine to enable this option. However,
-		// if you are doing or is intended to do any operation such as perform cleanups
-		// after the manager stops then its usage might be unsafe.
-		// LeaderElectionReleaseOnCancel: true,
+		LeaderElection:         false,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
@@ -161,6 +162,14 @@ func initFlags(fs *pflag.FlagSet) {
 	)
 
 	flag.StringVar(
+		&deployedCluster,
+		"current-cluster",
+		managedCluster,
+		"Indicate whether drift-detection-manager was deployed in the managed or the management cluster. "+
+			"Possible options are managed-cluster or management-cluster.",
+	)
+
+	flag.StringVar(
 		&clusterNamespace,
 		"cluster-namespace",
 		"",
@@ -180,10 +189,6 @@ func initFlags(fs *pflag.FlagSet) {
 		"",
 		"cluster type",
 	)
-
-	fs.BoolVar(&enableLeaderElection, "leader-elect", false,
-		"Enable leader election for controller manager. "+
-			"Enabling this will ensure there is only one active controller manager.")
 }
 
 func setupChecks(mgr ctrl.Manager) {
@@ -222,4 +227,40 @@ func initializeManager(ctx context.Context, mgr ctrl.Manager, sendUpdates contro
 		logger.V(logsettings.LogInfo).Info("manager initialized")
 		break
 	}
+}
+
+func getManagedClusterRestConfig(ctx context.Context, cfg *rest.Config, logger logr.Logger) *rest.Config {
+	logger = logger.WithValues("cluster", fmt.Sprintf("%s:%s/%s", clusterType, clusterNamespace, clusterName))
+	logger.V(logsettings.LogInfo).Info("get secret with kubeconfig")
+
+	// When running in the management cluster, drift-detection-manager will need
+	// to access Secret and Cluster/SveltosCluster (to verify existence)
+	s := runtime.NewScheme()
+	if err := clientgoscheme.AddToScheme(s); err != nil {
+		panic(1)
+	}
+	if err := clusterv1.AddToScheme(s); err != nil {
+		panic(1)
+	}
+	if err := libsveltosv1alpha1.AddToScheme(s); err != nil {
+		panic(1)
+	}
+
+	c, err := client.New(cfg, client.Options{Scheme: s})
+	if err != nil {
+		logger.V(logsettings.LogInfo).Info(fmt.Sprintf("failed to get management cluster client: %v", err))
+		panic(1)
+	}
+
+	// In this mode, drift-detection-manager is running in the management cluster.
+	// It access the managed cluster from here.
+	var currentCfg *rest.Config
+	currentCfg, err = clusterproxy.GetKubernetesRestConfig(ctx, c, clusterNamespace, clusterName, "", "",
+		libsveltosv1alpha1.ClusterType(clusterType), klogr.New())
+	if err != nil {
+		logger.V(logsettings.LogInfo).Info(fmt.Sprintf("failed to get secret: %v", err))
+		panic(1)
+	}
+
+	return currentCfg
 }
