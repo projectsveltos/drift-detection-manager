@@ -125,6 +125,7 @@ func main() {
 		ClusterNamespace:       clusterNamespace,
 		ClusterName:            clusterName,
 		ClusterType:            libsveltosv1alpha1.ClusterType(clusterType),
+		MapperLock:             sync.Mutex{},
 	}).SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ResourceSummary")
 		os.Exit(1)
