@@ -236,6 +236,22 @@ func (r *ResourceSummaryReconciler) getChartResource(helmResource *libsveltosv1a
 
 	copy(resources, helmResource.Resources)
 
+	// Helm Resources are taken by addon-controller from helm manifest
+	// and passed to drift-detection-manager. There are cases where
+	// namespace is not set even for namespace resources. See this
+	// for instance: https://github.com/projectsveltos/addon-controller/issues/363
+	// Instead of changing addon-controller which would require querying the
+	// api-server to understand if a resource is namespace or cluster wide,
+	// we add namespace here.
+	// From here on, returned slice will only be used in conjunction with
+	// dynamic.ResourceInterface which ignores namespace for cluster wide
+	// resources
+	for i := range resources {
+		if resources[i].Namespace == "" {
+			resources[i].Namespace = helmResource.ReleaseNamespace
+		}
+	}
+
 	return resources
 }
 
