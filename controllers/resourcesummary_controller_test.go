@@ -172,4 +172,54 @@ var _ = Describe("ResourceSummary Reconciler", func() {
 			),
 		).Should(BeTrue())
 	})
+
+	It("getChartResource collects resources", func() {
+		c := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+		reconciler := &controllers.ResourceSummaryReconciler{
+			Client:                 c,
+			Scheme:                 scheme,
+			Mux:                    sync.RWMutex{},
+			ResourceSummaryMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
+			HelmResourceSummaryMap: make(map[corev1.ObjectReference]*libsveltosset.Set),
+		}
+
+		resource1 := libsveltosv1alpha1.Resource{
+			Name:      randomString(),
+			Namespace: randomString(),
+			Group:     randomString(),
+			Kind:      randomString(),
+			Version:   randomString(),
+		}
+
+		resource2 := libsveltosv1alpha1.Resource{
+			Name:    randomString(),
+			Group:   randomString(),
+			Kind:    randomString(),
+			Version: randomString(),
+		}
+
+		helmResources := &libsveltosv1alpha1.HelmResources{
+			ChartName:        randomString(),
+			ReleaseName:      randomString(),
+			ReleaseNamespace: randomString(),
+			Resources: []libsveltosv1alpha1.Resource{
+				resource1, resource2,
+			},
+		}
+		resources := controllers.GetChartResource(reconciler, helmResources)
+
+		// When namespace is set, Resource is taken as it is
+		Expect(resources).To(ContainElement(resource1))
+
+		// When namespace is not set, helm chart namespace is used
+		tmpResource2 := libsveltosv1alpha1.Resource{
+			Name:      resource2.Name,
+			Namespace: helmResources.ReleaseNamespace,
+			Group:     resource2.Group,
+			Kind:      resource2.Kind,
+			Version:   resource2.Version,
+		}
+		Expect(resources).To(ContainElement(tmpResource2))
+	})
 })
