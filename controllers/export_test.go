@@ -21,6 +21,7 @@ var (
 	CleanMaps        = (*ResourceSummaryReconciler).cleanMaps
 	GetResources     = (*ResourceSummaryReconciler).getResources
 	GetHelmResources = (*ResourceSummaryReconciler).getHelmResources
+	GetChartResource = (*ResourceSummaryReconciler).getChartResource
 
 	GetKeyFromObject = getKeyFromObject
 )
