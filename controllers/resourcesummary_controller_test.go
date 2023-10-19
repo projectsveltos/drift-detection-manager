@@ -82,7 +82,8 @@ var _ = Describe("ResourceSummary Reconciler", func() {
 
 		resources := controllers.GetResources(reconciler, resourceSummary)
 		Expect(len(resources)).To(Equal(1))
-		helmResources := controllers.GetHelmResources(reconciler, resourceSummary)
+		helmResources, err := controllers.GetHelmResources(reconciler, context.TODO(), resourceSummary)
+		Expect(err).To(BeNil())
 		Expect(len(helmResources)).To(Equal(0))
 	})
 
@@ -90,6 +91,7 @@ var _ = Describe("ResourceSummary Reconciler", func() {
 		resourceSummary := getResourceSummary(nil, &resourceRef)
 
 		reconciler := &controllers.ResourceSummaryReconciler{
+			Config:                 testEnv.Config,
 			Client:                 testEnv.Client,
 			Scheme:                 scheme,
 			Mux:                    sync.RWMutex{},
@@ -99,7 +101,8 @@ var _ = Describe("ResourceSummary Reconciler", func() {
 
 		resources := controllers.GetResources(reconciler, resourceSummary)
 		Expect(len(resources)).To(Equal(0))
-		helmResources := controllers.GetHelmResources(reconciler, resourceSummary)
+		helmResources, err := controllers.GetHelmResources(reconciler, context.TODO(), resourceSummary)
+		Expect(err).To(BeNil())
 		Expect(len(helmResources)).To(Equal(1))
 	})
 
@@ -171,5 +174,66 @@ var _ = Describe("ResourceSummary Reconciler", func() {
 				libsveltosv1alpha1.ResourceSummaryFinalizer,
 			),
 		).Should(BeTrue())
+	})
+
+	It("getChartResource collects resources", func() {
+		reconciler := &controllers.ResourceSummaryReconciler{
+			Config:                 testEnv.Config,
+			Client:                 testEnv.Client,
+			Scheme:                 scheme,
+			Mux:                    sync.RWMutex{},
+			ResourceSummaryMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
+			HelmResourceSummaryMap: make(map[corev1.ObjectReference]*libsveltosset.Set),
+		}
+
+		resource1 := libsveltosv1alpha1.Resource{
+			Name:      randomString(),
+			Namespace: randomString(),
+			Group:     "apps",
+			Kind:      "Deployment",
+			Version:   "v1",
+		}
+
+		resource2 := libsveltosv1alpha1.Resource{
+			Name:    randomString(),
+			Group:   "",
+			Kind:    "Service",
+			Version: "v1",
+		}
+
+		resource3 := libsveltosv1alpha1.Resource{
+			Name:    randomString(),
+			Group:   "apiextensions.k8s.io",
+			Kind:    "CustomResourceDefinition",
+			Version: "v1",
+		}
+
+		helmResources := &libsveltosv1alpha1.HelmResources{
+			ChartName:        randomString(),
+			ReleaseName:      randomString(),
+			ReleaseNamespace: randomString(),
+			Resources: []libsveltosv1alpha1.Resource{
+				resource1, resource2, resource3,
+			},
+		}
+		resources, err := controllers.GetChartResource(reconciler, context.TODO(), helmResources)
+		Expect(err).To(BeNil())
+
+		// When namespace is set, Resource is taken as it is
+		Expect(resources).To(ContainElement(resource1))
+
+		// When namespace is not set, helm chart namespace is used
+		tmpResource2 := libsveltosv1alpha1.Resource{
+			Name:      resource2.Name,
+			Namespace: helmResources.ReleaseNamespace,
+			Group:     resource2.Group,
+			Kind:      resource2.Kind,
+			Version:   resource2.Version,
+		}
+		Expect(resources).To(ContainElement(tmpResource2))
+
+		// Namespace is not set on cluster wide resources
+		Expect(resources).To(ContainElement(resource3))
+
 	})
 })
