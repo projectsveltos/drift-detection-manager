@@ -25,9 +25,13 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/discovery"
+	memory "k8s.io/client-go/discovery/cached"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/restmapper"
 	"sigs.k8s.io/cluster-api/util/patch"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -81,6 +85,9 @@ type ResourceSummaryReconciler struct {
 	// This map is used efficiently stop tracking resources not referenced anynmore
 	// by ResourceSummary.
 	HelmResourceSummaryMap map[corev1.ObjectReference]*libsveltosset.Set
+
+	mapper     *restmapper.DeferredDiscoveryRESTMapper
+	MapperLock sync.Mutex
 }
 
 //+kubebuilder:rbac:groups=lib.projectsveltos.io,resources=resourcesummaries,verbs=get;list;watch;create;update;patch;delete
@@ -229,27 +236,65 @@ func (r *ResourceSummaryReconciler) addFinalizer(ctx context.Context, resourceSu
 }
 
 // getChartResource  gets all resources considering an Helm chart
-func (r *ResourceSummaryReconciler) getChartResource(helmResource *libsveltosv1alpha1.HelmResources,
-) []libsveltosv1alpha1.Resource {
+func (r *ResourceSummaryReconciler) getChartResource(ctx context.Context,
+	helmResource *libsveltosv1alpha1.HelmResources) ([]libsveltosv1alpha1.Resource, error) {
 
 	resources := make([]libsveltosv1alpha1.Resource, len(helmResource.Resources))
 
 	copy(resources, helmResource.Resources)
 
-	return resources
+	// Helm Resources are taken by addon-controller from helm manifest
+	// and passed to drift-detection-manager. There are cases where
+	// namespace is not set even for namespace resources. See this
+	// for instance: https://github.com/projectsveltos/addon-controller/issues/363
+	// Instead of changing addon-controller which would require querying the
+	// api-server to understand if a resource is namespace or cluster wide,
+	// we add namespace here.
+	// From here on, returned slice will only be used in conjunction with
+	// dynamic.ResourceInterface which ignores namespace for cluster wide
+	// resources
+	for i := range resources {
+		if resources[i].Namespace != "" {
+			continue
+		}
+		gvk := schema.GroupVersionKind{
+			Group:   resources[i].Group,
+			Kind:    resources[i].Kind,
+			Version: resources[i].Version,
+		}
+
+		mapper, err := r.getRESTMapper()
+		if err != nil {
+			return nil, err
+		}
+		var mapping *meta.RESTMapping
+		mapping, err = mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
+		if err != nil {
+			return nil, err
+		}
+		if mapping.Scope.Name() == meta.RESTScopeNameNamespace {
+			resources[i].Namespace = helmResource.ReleaseNamespace
+		}
+	}
+
+	return resources, nil
 }
 
 // getHelmResources gets all resources considering all the Helm charts in a ResourceSummary
-func (r *ResourceSummaryReconciler) getHelmResources(resourceSummary *libsveltosv1alpha1.ResourceSummary,
-) []libsveltosv1alpha1.Resource {
+func (r *ResourceSummaryReconciler) getHelmResources(ctx context.Context,
+	resourceSummary *libsveltosv1alpha1.ResourceSummary) ([]libsveltosv1alpha1.Resource, error) {
 
 	resources := make([]libsveltosv1alpha1.Resource, 0)
 
 	for i := range resourceSummary.Spec.ChartResources {
-		resources = append(resources, r.getChartResource(&resourceSummary.Spec.ChartResources[i])...)
+		chartResources, err := r.getChartResource(ctx, &resourceSummary.Spec.ChartResources[i])
+		if err != nil {
+			return nil, err
+		}
+		resources = append(resources, chartResources...)
 	}
 
-	return resources
+	return resources, nil
 }
 
 // getResources gets all resources in a ResourceSummary
@@ -328,14 +373,19 @@ func (r *ResourceSummaryReconciler) updateMaps(ctx context.Context,
 	// Get resources currently listed in ResourceSummary. Both resources deployed because
 	// of referenced ConfigMaps/Secrets and resources deployed because of helm charts.
 	resources := r.getResources(resourceSummary)
-	helmResources := r.getHelmResources(resourceSummary)
+	helmResources, err := r.getHelmResources(ctx, resourceSummary)
+	if err != nil {
+		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get helm resources: %v", err))
+		return err
+	}
 
 	r.Mux.Lock()
 	defer r.Mux.Unlock()
 
 	logger.V(logs.LogDebug).Info("register referenced resources")
 
-	resourceHashes, err := r.registerResources(ctx, resources, resourceSummary, false, logger)
+	var resourceHashes []libsveltosv1alpha1.ResourceHash
+	resourceHashes, err = r.registerResources(ctx, resources, resourceSummary, false, logger)
 	if err != nil {
 		return err
 	}
@@ -441,4 +491,21 @@ func (r *ResourceSummaryReconciler) unregisterResources(resources []corev1.Objec
 	}
 
 	return nil
+}
+
+// getRESTMapper returns DeferredDiscoveryRESTMapper for a given GVK
+func (r *ResourceSummaryReconciler) getRESTMapper() (*restmapper.DeferredDiscoveryRESTMapper, error) {
+	if r.mapper == nil {
+		r.MapperLock.Lock()
+		defer r.MapperLock.Unlock()
+		if r.mapper == nil {
+			dc, err := discovery.NewDiscoveryClientForConfig(r.Config)
+			if err != nil {
+				return nil, err
+			}
+			r.mapper = restmapper.NewDeferredDiscoveryRESTMapper(memory.NewMemCacheClient(dc))
+		}
+	}
+
+	return r.mapper, nil
 }
