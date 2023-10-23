@@ -303,9 +303,8 @@ func (m *manager) getUnstructured(ctx context.Context, resourceRef *corev1.Objec
 }
 
 // unstructuredHash returns hash considering *only*:
-// - labels
-// - annotations
-// - spec section
+// - labels from metadata
+// - any content but metadata and status
 func (m *manager) unstructuredHash(u *unstructured.Unstructured) []byte {
 	h := sha256.New()
 	var config string
@@ -315,18 +314,11 @@ func (m *manager) unstructuredHash(u *unstructured.Unstructured) []byte {
 		config += render.AsCode(labels)
 	}
 
-	annotations := u.GetAnnotations()
-	if labels != nil {
-		config += render.AsCode(annotations)
-	}
-
 	content := u.UnstructuredContent()
-	if _, ok := content["spec"]; ok {
-		config += render.AsCode(content["spec"])
-	}
-
-	if _, ok := content["rules"]; ok {
-		config += render.AsCode(content["rules"])
+	for k := range content {
+		if k != "metadata" && k != "status" {
+			config += render.AsCode(content[k])
+		}
 	}
 
 	h.Write([]byte(config))
