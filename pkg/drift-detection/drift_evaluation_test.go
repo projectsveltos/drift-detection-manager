@@ -19,7 +19,9 @@ package driftdetection_test
 import (
 	"context"
 	"fmt"
+	"time"
 
+	"github.com/gdexlab/go-render/render"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -79,6 +81,7 @@ var _ = Describe("Manager: drift evaluation", func() {
 	})
 
 	It("evaluateResource: detects a configuration drift when resource is updated/deleted", func() {
+		By(fmt.Sprintf("using resource %s:%s/%s", resource.Kind, resource.Namespace, resource.Name))
 		Expect(driftdetection.InitializeManager(watcherCtx, klogr.New(), testEnv.Config, testEnv.Client, scheme,
 			randomString(), randomString(), libsveltosv1alpha1.ClusterTypeCapi, evaluateTimeout, false)).To(Succeed())
 		manager, err := driftdetection.GetManager()
@@ -95,6 +98,9 @@ var _ = Describe("Manager: drift evaluation", func() {
 		u, err := driftdetection.GetUnstructured(manager, watcherCtx, &resourceRef)
 		Expect(err).To(BeNil())
 		Expect(u).ToNot(BeNil())
+
+		By(fmt.Sprintf("MGIANLUC %s", render.AsCode(u)))
+		time.Sleep(30)
 
 		// Prepare test. Store resource hash and store resourceSummary has one
 		// of the ResourceSummary instances referencing resource
@@ -116,10 +122,19 @@ var _ = Describe("Manager: drift evaluation", func() {
 		manager.AddResource(&resourceRef, resourceSummaryRef)
 		By(fmt.Sprintf("Using ResourceSummary %s/%s", resourceSummary.Namespace, resourceSummary.Name))
 
+		// MGIANLUC
+		u, err = driftdetection.GetUnstructured(manager, watcherCtx, &resourceRef)
+		Expect(err).To(BeNil())
+		Expect(u).ToNot(BeNil())
+		By(fmt.Sprintf("MGIANLUC %s", render.AsCode(u)))
+		time.Sleep(60)
+
 		By("Verify no drift is detected")
 		// Since there has been no change, expect that ResourceSummary is not marked for reconciliation
 		Expect(driftdetection.EvaluateResource(manager, watcherCtx, &resourceRef)).To(Succeed())
 		verifyResourceSummary(resourceSummary, false, false)
+
+		Expect(1).To(BeZero())
 
 		By("Modify resource")
 		// Modify resource
