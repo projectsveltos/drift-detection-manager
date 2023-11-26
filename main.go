@@ -38,8 +38,11 @@ import (
 	"k8s.io/klog/v2/klogr"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/projectsveltos/drift-detection-manager/controllers"
 	driftdetection "github.com/projectsveltos/drift-detection-manager/pkg/drift-detection"
@@ -65,6 +68,10 @@ var (
 	clusterNamespace string
 	clusterName      string
 	clusterType      string
+	restConfigQPS    float32
+	restConfigBurst  int
+	webhookPort      int
+	syncPeriod       time.Duration
 )
 
 func main() {
@@ -84,30 +91,39 @@ func main() {
 
 	ctx := ctrl.SetupSignalHandler()
 
-	cfg := ctrl.GetConfigOrDie()
+	ctrlOptions := ctrl.Options{
+		Scheme:                 scheme,
+		HealthProbeBindAddress: probeAddr,
+		Metrics: metricsserver.Options{
+			BindAddress: metricsAddr,
+		},
+		WebhookServer: webhook.NewServer(
+			webhook.Options{
+				Port: webhookPort,
+			}),
+		Cache: cache.Options{
+			SyncPeriod: &syncPeriod,
+		},
+	}
+
+	restConfig := ctrl.GetConfigOrDie()
 	if deployedCluster != managedCluster {
 		// if drift-detection-manager is running in the management cluster, get the kubeconfig
 		// of the managed cluster
-		cfg = getManagedClusterRestConfig(ctx, cfg, ctrl.Log.WithName("get-kubeconfig"))
+		restConfig = getManagedClusterRestConfig(ctx, restConfig, ctrl.Log.WithName("get-kubeconfig"))
 	}
-	cfg.Burst = 60
-	cfg.QPS = 40
+	restConfig.QPS = restConfigQPS
+	restConfig.Burst = restConfigBurst
 
-	logsettings.RegisterForLogSettings(ctx,
-		libsveltosv1alpha1.ComponentDriftDetectionManager, ctrl.Log.WithName("log-setter"),
-		cfg)
-
-	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
-		Scheme:                 scheme,
-		MetricsBindAddress:     metricsAddr,
-		Port:                   9443,
-		HealthProbeBindAddress: probeAddr,
-		LeaderElection:         false,
-	})
+	mgr, err := ctrl.NewManager(restConfig, ctrlOptions)
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
+
+	logsettings.RegisterForLogSettings(ctx,
+		libsveltosv1alpha1.ComponentDriftDetectionManager, ctrl.Log.WithName("log-setter"),
+		restConfig)
 
 	sendUpdates := controllers.SendUpdates // do not send reports
 	if runMode == noUpdates {
@@ -190,6 +206,25 @@ func initFlags(fs *pflag.FlagSet) {
 		"",
 		"cluster type",
 	)
+
+	const defautlRestConfigQPS = 40
+	fs.Float32Var(&restConfigQPS, "kube-api-qps", defautlRestConfigQPS,
+		fmt.Sprintf("Maximum queries per second from the controller client to the Kubernetes API server. Defaults to %d",
+			defautlRestConfigQPS))
+
+	const defaultRestConfigBurst = 60
+	fs.IntVar(&restConfigBurst, "kube-api-burst", defaultRestConfigBurst,
+		fmt.Sprintf("Maximum number of queries that should be allowed in one burst from the controller client to the Kubernetes API server. Default %d",
+			defaultRestConfigBurst))
+
+	const defaultWebhookPort = 9443
+	fs.IntVar(&webhookPort, "webhook-port", defaultWebhookPort,
+		"Webhook Server port")
+
+	const defaultSyncPeriod = 10
+	fs.DurationVar(&syncPeriod, "sync-period", defaultSyncPeriod*time.Minute,
+		fmt.Sprintf("The minimum interval at which watched resources are reconciled (e.g. 15m). Default: %d minutes",
+			defaultSyncPeriod))
 }
 
 func setupChecks(mgr ctrl.Manager) {
