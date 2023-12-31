@@ -19,12 +19,13 @@ package driftdetection_test
 import (
 	"context"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/klog/v2/klogr"
+	"k8s.io/klog/v2/textlogger"
 
 	driftdetection "github.com/projectsveltos/drift-detection-manager/pkg/drift-detection"
 	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
@@ -33,8 +34,11 @@ import (
 var _ = Describe("Manager: react", func() {
 	var watcherCtx context.Context
 	var resource corev1.Namespace
+	var logger logr.Logger
 
 	BeforeEach(func() {
+		logger = textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1)))
+
 		driftdetection.Reset()
 
 		watcherCtx, cancel = context.WithCancel(context.Background())
@@ -51,7 +55,7 @@ var _ = Describe("Manager: react", func() {
 	})
 
 	It("react: queue resource to be evaluated for configuration drift", func() {
-		Expect(driftdetection.InitializeManager(watcherCtx, klogr.New(), testEnv.Config, testEnv.Client, scheme,
+		Expect(driftdetection.InitializeManager(watcherCtx, logger, testEnv.Config, testEnv.Client, scheme,
 			randomString(), randomString(), libsveltosv1alpha1.ClusterTypeCapi, evaluateTimeout, false)).To(Succeed())
 		manager, err := driftdetection.GetManager()
 		Expect(err).To(BeNil())
@@ -65,7 +69,7 @@ var _ = Describe("Manager: react", func() {
 		}
 
 		gvk := resourceRef.GroupVersionKind()
-		driftdetection.React(manager, &gvk, &resource, klogr.New())
+		driftdetection.React(manager, &gvk, &resource, logger)
 
 		// Since there is no resource of this GVK tracked, resource is queued
 		// for configuration drift evaluation
@@ -76,7 +80,7 @@ var _ = Describe("Manager: react", func() {
 		resourceSummary := getResourceSummary(&resourceRef, nil)
 		resourceSummaryRef := getObjRefFromResourceSummary(resourceSummary)
 		manager.AddResource(&resourceRef, resourceSummaryRef)
-		driftdetection.React(manager, &gvk, &resource, klogr.New())
+		driftdetection.React(manager, &gvk, &resource, logger)
 
 		// Since resource is now tracked, resource is queued
 		// for configuration drift evaluation
