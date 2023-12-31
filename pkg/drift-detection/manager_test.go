@@ -20,6 +20,7 @@ import (
 	"context"
 	"reflect"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -27,7 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/klog/v2/klogr"
+	"k8s.io/klog/v2/textlogger"
 
 	driftdetection "github.com/projectsveltos/drift-detection-manager/pkg/drift-detection"
 	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
@@ -36,8 +37,11 @@ import (
 var _ = Describe("Manager: registration", func() {
 	var watcherCtx context.Context
 	var resource corev1.Namespace
+	var logger logr.Logger
 
 	BeforeEach(func() {
+		logger = textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1)))
+
 		driftdetection.Reset()
 		watcherCtx, cancel = context.WithCancel(context.Background())
 
@@ -58,7 +62,7 @@ var _ = Describe("Manager: registration", func() {
 
 		Expect(addTypeInformationToObject(scheme, &resource)).To(Succeed())
 
-		Expect(driftdetection.InitializeManager(watcherCtx, klogr.New(), testEnv.Config, testEnv.Client, scheme,
+		Expect(driftdetection.InitializeManager(watcherCtx, logger, testEnv.Config, testEnv.Client, scheme,
 			randomString(), randomString(), libsveltosv1alpha1.ClusterTypeCapi, evaluateTimeout, false)).To(Succeed())
 		manager, err := driftdetection.GetManager()
 		Expect(err).To(BeNil())
@@ -118,7 +122,7 @@ var _ = Describe("Manager: registration", func() {
 	})
 
 	It("readResourceSummaries processes all existing ResourceSummaries", func() {
-		Expect(driftdetection.InitializeManager(watcherCtx, klogr.New(), testEnv.Config, testEnv.Client, scheme,
+		Expect(driftdetection.InitializeManager(watcherCtx, logger, testEnv.Config, testEnv.Client, scheme,
 			randomString(), randomString(), libsveltosv1alpha1.ClusterTypeCapi, evaluateTimeout, false)).To(Succeed())
 		manager, err := driftdetection.GetManager()
 		Expect(err).To(BeNil())

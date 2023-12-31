@@ -29,7 +29,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/klog/v2/klogr"
+	"k8s.io/klog/v2/textlogger"
 
 	"github.com/projectsveltos/drift-detection-manager/controllers"
 	driftdetection "github.com/projectsveltos/drift-detection-manager/pkg/drift-detection"
@@ -126,15 +126,17 @@ var _ = Describe("ResourceSummary Reconciler", func() {
 			HelmResourceSummaryMap: make(map[corev1.ObjectReference]*libsveltosset.Set),
 		}
 
+		logger := textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1)))
+
 		// Manager initialization is done within SetupManager. So test calls it directly here.
-		Expect(driftdetection.InitializeManager(watcherCtx, klogr.New(), testEnv.Config, testEnv.Client, scheme,
+		Expect(driftdetection.InitializeManager(watcherCtx, logger, testEnv.Config, testEnv.Client, scheme,
 			randomString(), randomString(), libsveltosv1alpha1.ClusterTypeCapi, evaluateTimeout, false)).To(Succeed())
 
-		Expect(controllers.UpdateMaps(reconciler, context.TODO(), resourceSummary, klogr.New())).To(Succeed())
+		Expect(controllers.UpdateMaps(reconciler, context.TODO(), resourceSummary, logger)).To(Succeed())
 		Expect(len(reconciler.ResourceSummaryMap)).To(Equal(1))
 		Expect(len(reconciler.HelmResourceSummaryMap)).To(Equal(0))
 
-		Expect(controllers.CleanMaps(reconciler, resourceSummary, klogr.New())).To(Succeed())
+		Expect(controllers.CleanMaps(reconciler, resourceSummary, logger)).To(Succeed())
 		Expect(len(reconciler.ResourceSummaryMap)).To(Equal(0))
 		Expect(len(reconciler.HelmResourceSummaryMap)).To(Equal(0))
 	})

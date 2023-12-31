@@ -17,11 +17,12 @@ limitations under the License.
 package scope_test
 
 import (
+	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/klog/v2/klogr"
+	"k8s.io/klog/v2/textlogger"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -38,8 +39,11 @@ const (
 var _ = Describe("ResourceSummaryScope", func() {
 	var resourceSummary *libsveltosv1alpha1.ResourceSummary
 	var c client.Client
+	var logger logr.Logger
 
 	BeforeEach(func() {
+		logger = textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1)))
+
 		resourceSummary = &libsveltosv1alpha1.ResourceSummary{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: resourceSummaryNamePrefix + randomString(),
@@ -54,7 +58,7 @@ var _ = Describe("ResourceSummaryScope", func() {
 	It("Return nil,error if ResourceSummary is not specified", func() {
 		params := scope.ResourceSummaryScopeParams{
 			Client: c,
-			Logger: klogr.New(),
+			Logger: logger,
 		}
 
 		scope, err := scope.NewResourceSummaryScope(params)
@@ -65,7 +69,7 @@ var _ = Describe("ResourceSummaryScope", func() {
 	It("Return nil,error if client is not specified", func() {
 		params := scope.ResourceSummaryScopeParams{
 			ResourceSummary: resourceSummary,
-			Logger:          klogr.New(),
+			Logger:          logger,
 		}
 
 		scope, err := scope.NewResourceSummaryScope(params)
@@ -77,7 +81,7 @@ var _ = Describe("ResourceSummaryScope", func() {
 		params := scope.ResourceSummaryScopeParams{
 			Client:          c,
 			ResourceSummary: resourceSummary,
-			Logger:          klogr.New(),
+			Logger:          logger,
 		}
 
 		scope, err := scope.NewResourceSummaryScope(params)
