@@ -27,7 +27,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/klog/v2/klogr"
+	"k8s.io/klog/v2/textlogger"
 
 	driftdetection "github.com/projectsveltos/drift-detection-manager/pkg/drift-detection"
 	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
@@ -79,7 +79,9 @@ var _ = Describe("Manager: drift evaluation", func() {
 	})
 
 	It("evaluateResource: detects a configuration drift when resource is updated/deleted", func() {
-		Expect(driftdetection.InitializeManager(watcherCtx, klogr.New(), testEnv.Config, testEnv.Client, scheme,
+		logger := textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1)))
+
+		Expect(driftdetection.InitializeManager(watcherCtx, logger, testEnv.Config, testEnv.Client, scheme,
 			randomString(), randomString(), libsveltosv1alpha1.ClusterTypeCapi, evaluateTimeout, false)).To(Succeed())
 		manager, err := driftdetection.GetManager()
 		Expect(err).To(BeNil())
@@ -167,7 +169,9 @@ var _ = Describe("Manager: drift evaluation", func() {
 	})
 
 	It("requestReconciliationForResourceSummary updates ResourceSummary Status", func() {
-		Expect(driftdetection.InitializeManager(watcherCtx, klogr.New(), testEnv.Config, testEnv.Client, scheme,
+		logger := textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1)))
+
+		Expect(driftdetection.InitializeManager(watcherCtx, logger, testEnv.Config, testEnv.Client, scheme,
 			randomString(), randomString(), libsveltosv1alpha1.ClusterTypeCapi, evaluateTimeout, false)).To(Succeed())
 		manager, err := driftdetection.GetManager()
 		Expect(err).To(BeNil())

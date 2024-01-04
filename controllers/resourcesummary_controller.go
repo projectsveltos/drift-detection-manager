@@ -138,17 +138,17 @@ func (r *ResourceSummaryReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	// Handle deleted resourceSummary
 	if !resourceSummary.DeletionTimestamp.IsZero() {
-		return r.reconcileDelete(resourceSummaryScope, logger)
+		return reconcile.Result{}, r.reconcileDelete(resourceSummaryScope, logger)
 	}
 
 	// Handle non-deleted resourceSummary
-	return r.reconcileNormal(ctx, resourceSummaryScope, logger)
+	return reconcile.Result{}, r.reconcileNormal(ctx, resourceSummaryScope, logger)
 }
 
 func (r *ResourceSummaryReconciler) reconcileDelete(
 	resourceSummaryScope *scope.ResourceSummaryScope,
 	logger logr.Logger,
-) (reconcile.Result, error) {
+) error {
 
 	logger.V(logs.LogDebug).Info("reconcile delete")
 
@@ -157,7 +157,7 @@ func (r *ResourceSummaryReconciler) reconcileDelete(
 	// stop tracking resources referenced by ResourceSummary in last iteration.
 	// Updates internal maps by removing any entry for this ResourceSummary instance.
 	if err := r.cleanMaps(resourceSummary, logger); err != nil {
-		return reconcile.Result{}, err
+		return err
 	}
 
 	if controllerutil.ContainsFinalizer(resourceSummary, libsveltosv1alpha1.ResourceSummaryFinalizer) {
@@ -165,13 +165,13 @@ func (r *ResourceSummaryReconciler) reconcileDelete(
 	}
 
 	logger.V(logs.LogInfo).Info("reconciliation delete succeeded")
-	return ctrl.Result{}, nil
+	return nil
 }
 
 func (r *ResourceSummaryReconciler) reconcileNormal(ctx context.Context,
 	resourceSummaryScope *scope.ResourceSummaryScope,
 	logger logr.Logger,
-) (reconcile.Result, error) {
+) error {
 
 	logger.V(logs.LogDebug).Info("reconcile")
 
@@ -180,7 +180,7 @@ func (r *ResourceSummaryReconciler) reconcileNormal(ctx context.Context,
 	if !controllerutil.ContainsFinalizer(resourceSummary, libsveltosv1alpha1.ResourceSummaryFinalizer) {
 		if err := r.addFinalizer(ctx, resourceSummary, logger); err != nil {
 			logger.V(logs.LogInfo).Info("failed to update finalizer")
-			return reconcile.Result{}, err
+			return err
 		}
 	}
 
@@ -188,11 +188,11 @@ func (r *ResourceSummaryReconciler) reconcileNormal(ctx context.Context,
 	// Start tracking all such resources.
 	if err := r.updateMaps(ctx, resourceSummary, logger); err != nil {
 		logger.V(logs.LogInfo).Info("failed to update maps")
-		return reconcile.Result{}, err
+		return err
 	}
 
 	logger.V(logs.LogInfo).Info("reconciliation succeeded")
-	return ctrl.Result{}, nil
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
