@@ -21,6 +21,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"reflect"
+	"sort"
 	"sync"
 	"time"
 
@@ -32,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/dump"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -302,9 +304,20 @@ func (m *manager) getUnstructured(ctx context.Context, resourceRef *corev1.Objec
 	return u, nil
 }
 
+func getSortedKeys(inputMap map[string]interface{}) []string {
+	keys := make([]string, 0, len(inputMap))
+	for k := range inputMap {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	return keys
+}
+
 // unstructuredHash returns hash considering *only*:
 // - labels from metadata
 // - any content but metadata and status
+// - does not consider annotation in ConfigMap: annotations are used for leader-election so frequently change
 func (m *manager) unstructuredHash(u *unstructured.Unstructured) []byte {
 	h := sha256.New()
 	var config string
@@ -314,10 +327,21 @@ func (m *manager) unstructuredHash(u *unstructured.Unstructured) []byte {
 		config += render.AsCode(labels)
 	}
 
+	if u.GroupVersionKind().Kind != "ConfigMap" {
+		// In ConfigMap annotations are used for leader-election info
+		// so frequently change. Ignore those to avoid continuous up reconciliation
+		annotations := u.GetAnnotations()
+		if annotations != nil {
+			config += render.AsCode(annotations)
+		}
+	}
+
 	content := u.UnstructuredContent()
-	for k := range content {
+	sortedKeys := getSortedKeys(content)
+
+	for _, k := range sortedKeys {
 		if k != "metadata" && k != "status" {
-			config += render.AsCode(content[k])
+			config += render.AsCode(dump.ForHash(content[k]))
 		}
 	}
 
