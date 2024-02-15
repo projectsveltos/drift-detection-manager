@@ -242,7 +242,7 @@ func initializeManager(ctx context.Context, mgr ctrl.Manager, sendUpdates contro
 	clusterNamespace, clusterName string, clusterType libsveltosv1alpha1.ClusterType,
 	logger logr.Logger) {
 
-	const intervalInSecond = 10
+	const intervalInSecond = 5
 
 	for {
 		var err error
