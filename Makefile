@@ -36,7 +36,7 @@ ARCH ?= amd64
 OS ?= $(shell uname -s | tr A-Z a-z)
 K8S_LATEST_VER ?= $(shell curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)
 export CONTROLLER_IMG ?= $(REGISTRY)/$(IMAGE_NAME)
-TAG ?= main
+TAG ?= v0.30.0
 
 ## Tool Binaries
 CONTROLLER_GEN := $(TOOLS_BIN_DIR)/controller-gen
@@ -47,7 +47,7 @@ GINKGO := $(TOOLS_BIN_DIR)/ginkgo
 KIND := $(TOOLS_BIN_DIR)/kind
 KUBECTL := $(TOOLS_BIN_DIR)/kubectl
 
-GOLANGCI_LINT_VERSION := "v1.55.2"
+GOLANGCI_LINT_VERSION := "v1.57.2"
 
 KUSTOMIZE_VER := v4.5.2
 KUSTOMIZE_BIN := kustomize
@@ -150,7 +150,7 @@ endif
 # K8S_VERSION for the Kind cluster can be set as environment variable. If not defined,
 # this default value is used
 ifndef K8S_VERSION
-K8S_VERSION := v1.29.1
+K8S_VERSION := v1.30.0
 endif
 
 KIND_CONFIG ?= kind-cluster.yaml
