@@ -18,12 +18,14 @@ package driftdetection
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
@@ -92,6 +94,11 @@ func (m *manager) evaluateResource(ctx context.Context, resourceRef *corev1.Obje
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			logger.V(logs.LogInfo).Info("resource has been deleted. Request reconciliation.")
+			m.updateResourceHash(resourceRef, nil)
+			return m.requestReconciliations(ctx, resourceRef, nil)
+		}
+		if errors.Is(err, &meta.NoKindMatchError{}) {
+			logger.V(logs.LogInfo).Info("CRD has been deleted. Request reconciliation.")
 			m.updateResourceHash(resourceRef, nil)
 			return m.requestReconciliations(ctx, resourceRef, nil)
 		}
