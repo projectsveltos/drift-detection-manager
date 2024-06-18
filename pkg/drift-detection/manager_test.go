@@ -31,7 +31,7 @@ import (
 	"k8s.io/klog/v2/textlogger"
 
 	driftdetection "github.com/projectsveltos/drift-detection-manager/pkg/drift-detection"
-	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 )
 
 var _ = Describe("Manager: registration", func() {
@@ -63,7 +63,7 @@ var _ = Describe("Manager: registration", func() {
 		Expect(addTypeInformationToObject(scheme, &resource)).To(Succeed())
 
 		Expect(driftdetection.InitializeManager(watcherCtx, logger, testEnv.Config, testEnv.Client, scheme,
-			randomString(), randomString(), libsveltosv1alpha1.ClusterTypeCapi, evaluateTimeout, false)).To(Succeed())
+			randomString(), randomString(), libsveltosv1beta1.ClusterTypeCapi, evaluateTimeout, false)).To(Succeed())
 		manager, err := driftdetection.GetManager()
 		Expect(err).To(BeNil())
 
@@ -123,7 +123,7 @@ var _ = Describe("Manager: registration", func() {
 
 	It("readResourceSummaries processes all existing ResourceSummaries", func() {
 		Expect(driftdetection.InitializeManager(watcherCtx, logger, testEnv.Config, testEnv.Client, scheme,
-			randomString(), randomString(), libsveltosv1alpha1.ClusterTypeCapi, evaluateTimeout, false)).To(Succeed())
+			randomString(), randomString(), libsveltosv1beta1.ClusterTypeCapi, evaluateTimeout, false)).To(Succeed())
 		manager, err := driftdetection.GetManager()
 		Expect(err).To(BeNil())
 
@@ -150,15 +150,15 @@ var _ = Describe("Manager: registration", func() {
 		Expect(waitForObject(watcherCtx, testEnv.Client, resourceSummary)).To(Succeed())
 
 		// Update ResourceSummary status
-		currentResourceSummary := &libsveltosv1alpha1.ResourceSummary{}
+		currentResourceSummary := &libsveltosv1beta1.ResourceSummary{}
 		Expect(testEnv.Get(watcherCtx,
 			types.NamespacedName{Namespace: resourceSummary.Namespace, Name: resourceSummary.Name},
 			currentResourceSummary)).To(Succeed())
 		hash := randomString()
-		currentResourceSummary.Status.ResourceHashes = []libsveltosv1alpha1.ResourceHash{
+		currentResourceSummary.Status.ResourceHashes = []libsveltosv1beta1.ResourceHash{
 			{
 				Hash: hash,
-				Resource: libsveltosv1alpha1.Resource{
+				Resource: libsveltosv1beta1.Resource{
 					Kind:      resource.Kind,
 					Group:     resource.GroupVersionKind().Group,
 					Version:   resource.GroupVersionKind().Version,
@@ -167,10 +167,10 @@ var _ = Describe("Manager: registration", func() {
 				},
 			},
 		}
-		currentResourceSummary.Status.HelmResourceHashes = []libsveltosv1alpha1.ResourceHash{
+		currentResourceSummary.Status.HelmResourceHashes = []libsveltosv1beta1.ResourceHash{
 			{
 				Hash: hash,
-				Resource: libsveltosv1alpha1.Resource{
+				Resource: libsveltosv1beta1.Resource{
 					Kind:      resource.Kind,
 					Group:     resource.GroupVersionKind().Group,
 					Version:   resource.GroupVersionKind().Version,
@@ -201,11 +201,11 @@ var _ = Describe("Manager: registration", func() {
 	})
 })
 
-func getObjRefFromResourceSummary(resourceSummary *libsveltosv1alpha1.ResourceSummary) *corev1.ObjectReference {
+func getObjRefFromResourceSummary(resourceSummary *libsveltosv1beta1.ResourceSummary) *corev1.ObjectReference {
 	gvk := schema.GroupVersionKind{
-		Group:   libsveltosv1alpha1.GroupVersion.Group,
-		Version: libsveltosv1alpha1.GroupVersion.Version,
-		Kind:    libsveltosv1alpha1.ResourceSummaryKind,
+		Group:   libsveltosv1beta1.GroupVersion.Group,
+		Version: libsveltosv1beta1.GroupVersion.Version,
+		Kind:    libsveltosv1beta1.ResourceSummaryKind,
 	}
 
 	apiVersion, kind := gvk.ToAPIVersionAndKind()

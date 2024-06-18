@@ -37,7 +37,7 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
 	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
 	"github.com/projectsveltos/libsveltos/lib/utils"
@@ -66,7 +66,7 @@ type manager struct {
 	sendUpdates      bool
 	clusterNamespace string
 	clusterName      string
-	clusterType      libsveltosv1alpha1.ClusterType
+	clusterType      libsveltosv1beta1.ClusterType
 
 	mu *sync.RWMutex
 
@@ -102,7 +102,7 @@ type manager struct {
 
 // InitializeManager initializes a manager
 func InitializeManager(ctx context.Context, l logr.Logger, config *rest.Config, c client.Client,
-	scheme *runtime.Scheme, clusterNamespace, clusterName string, cluserType libsveltosv1alpha1.ClusterType,
+	scheme *runtime.Scheme, clusterNamespace, clusterName string, cluserType libsveltosv1beta1.ClusterType,
 	intervalInSecond uint, sendUpdates bool) error {
 
 	if managerInstance == nil {
@@ -369,7 +369,7 @@ func (m *manager) checkForConfigurationDrift(resourceRef *corev1.ObjectReference
 // ResourceSummary Status is marked for reconciliation and ResourceSummary Status is updated
 // with current deployment hash.
 func (m *manager) readResourceSummaries(ctx context.Context) error {
-	list := &libsveltosv1alpha1.ResourceSummaryList{}
+	list := &libsveltosv1beta1.ResourceSummaryList{}
 
 	if err := m.List(ctx, list); err != nil {
 		return err
@@ -388,7 +388,7 @@ func (m *manager) readResourceSummaries(ctx context.Context) error {
 	return nil
 }
 
-func (m *manager) readResourceSummary(ctx context.Context, resourceSummary *libsveltosv1alpha1.ResourceSummary,
+func (m *manager) readResourceSummary(ctx context.Context, resourceSummary *libsveltosv1beta1.ResourceSummary,
 ) error {
 
 	if err := m.processResourceHashes(ctx, resourceSummary.Status.ResourceHashes,
@@ -404,8 +404,8 @@ func (m *manager) readResourceSummary(ctx context.Context, resourceSummary *libs
 	return nil
 }
 
-func (m *manager) processResourceHashes(ctx context.Context, resourceHashes []libsveltosv1alpha1.ResourceHash,
-	isHelm bool, resourceSummary *libsveltosv1alpha1.ResourceSummary) error {
+func (m *manager) processResourceHashes(ctx context.Context, resourceHashes []libsveltosv1beta1.ResourceHash,
+	isHelm bool, resourceSummary *libsveltosv1beta1.ResourceSummary) error {
 
 	resourceSummaryDef := m.getObjectReference(resourceSummary)
 

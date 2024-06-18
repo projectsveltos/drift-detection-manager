@@ -32,7 +32,7 @@ GOBUILD=go build
 # Define Docker related variables.
 REGISTRY ?= projectsveltos
 IMAGE_NAME ?= drift-detection-manager
-ARCH ?= amd64
+ARCH ?= $(shell go env GOARCH)
 OS ?= $(shell uname -s | tr A-Z a-z)
 K8S_LATEST_VER ?= $(shell curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)
 export CONTROLLER_IMG ?= $(REGISTRY)/$(IMAGE_NAME)
@@ -256,8 +256,8 @@ deploy-projectsveltos: $(KUSTOMIZE)
 	$(MAKE) load-image
 	
 	@echo 'Install libsveltos CRDs'
-	$(KUBECTL) apply -f https://raw.githubusercontent.com/projectsveltos/libsveltos/$(TAG)/config/crd/bases/lib.projectsveltos.io_debuggingconfigurations.yaml
-	$(KUBECTL) apply -f https://raw.githubusercontent.com/projectsveltos/libsveltos/$(TAG)/config/crd/bases/lib.projectsveltos.io_resourcesummaries.yaml
+	$(KUBECTL) apply -f https://raw.githubusercontent.com/projectsveltos/libsveltos/$(TAG)/manifests/apiextensions.k8s.io_v1_customresourcedefinition_debuggingconfigurations.lib.projectsveltos.io.yaml
+	$(KUBECTL) apply -f https://raw.githubusercontent.com/projectsveltos/libsveltos/$(TAG)/manifests/apiextensions.k8s.io_v1_customresourcedefinition_resourcesummaries.lib.projectsveltos.io.yaml
 
 	# Install projectsveltos drift-detection-manager component
 	@echo 'Install projectsveltos drift-detection-manager component'

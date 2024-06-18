@@ -29,7 +29,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 )
 
 var _ = Describe("Start watcher", Label("FV"), func() {
@@ -69,7 +69,7 @@ var _ = Describe("Start watcher", Label("FV"), func() {
 
 		By(fmt.Sprintf("Verify ResourceSummary %s is marked for reconciliation", resourceSummary.Name))
 		Eventually(func() bool {
-			currentResourceSummary := &libsveltosv1alpha1.ResourceSummary{}
+			currentResourceSummary := &libsveltosv1beta1.ResourceSummary{}
 			err := k8sClient.Get(context.TODO(),
 				types.NamespacedName{Namespace: resourceSummary.Namespace, Name: resourceSummary.Name},
 				currentResourceSummary)
@@ -79,7 +79,7 @@ var _ = Describe("Start watcher", Label("FV"), func() {
 		verifyResourceSummaryResourceHashes(resourceSummary, namespace)
 
 		By("Reset ResourceSummary status")
-		currentResourceSummary := &libsveltosv1alpha1.ResourceSummary{}
+		currentResourceSummary := &libsveltosv1beta1.ResourceSummary{}
 		Expect(k8sClient.Get(context.TODO(),
 			types.NamespacedName{Namespace: resourceSummary.Namespace, Name: resourceSummary.Name},
 			currentResourceSummary)).To(Succeed())
@@ -117,12 +117,12 @@ var _ = Describe("Start watcher", Label("FV"), func() {
 	})
 })
 
-func verifyResourceSummaryResourceHashes(resourceSummary *libsveltosv1alpha1.ResourceSummary,
+func verifyResourceSummaryResourceHashes(resourceSummary *libsveltosv1beta1.ResourceSummary,
 	resource client.Object) {
 
 	By(fmt.Sprintf("Verify ResourceSummary %s contains hash for namespace", resourceSummary.Name))
 	Eventually(func() bool {
-		currentResourceSummary := &libsveltosv1alpha1.ResourceSummary{}
+		currentResourceSummary := &libsveltosv1beta1.ResourceSummary{}
 		err := k8sClient.Get(context.TODO(),
 			types.NamespacedName{Namespace: resourceSummary.Namespace, Name: resourceSummary.Name},
 			currentResourceSummary)

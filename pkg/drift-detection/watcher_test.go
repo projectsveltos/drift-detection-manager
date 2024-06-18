@@ -28,7 +28,7 @@ import (
 	"k8s.io/klog/v2/textlogger"
 
 	driftdetection "github.com/projectsveltos/drift-detection-manager/pkg/drift-detection"
-	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 )
 
 var _ = Describe("Manager: react", func() {
@@ -56,7 +56,7 @@ var _ = Describe("Manager: react", func() {
 
 	It("react: queue resource to be evaluated for configuration drift", func() {
 		Expect(driftdetection.InitializeManager(watcherCtx, logger, testEnv.Config, testEnv.Client, scheme,
-			randomString(), randomString(), libsveltosv1alpha1.ClusterTypeCapi, evaluateTimeout, false)).To(Succeed())
+			randomString(), randomString(), libsveltosv1beta1.ClusterTypeCapi, evaluateTimeout, false)).To(Succeed())
 		manager, err := driftdetection.GetManager()
 		Expect(err).To(BeNil())
 

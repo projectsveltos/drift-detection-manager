@@ -39,7 +39,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/projectsveltos/drift-detection-manager/internal/test/helpers"
-	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	"github.com/projectsveltos/libsveltos/lib/crd"
 	"github.com/projectsveltos/libsveltos/lib/utils"
 )
@@ -119,7 +119,7 @@ func randomString() string {
 
 func setupScheme() (*runtime.Scheme, error) {
 	s := runtime.NewScheme()
-	if err := libsveltosv1alpha1.AddToScheme(s); err != nil {
+	if err := libsveltosv1beta1.AddToScheme(s); err != nil {
 		return nil, err
 	}
 	if err := clientgoscheme.AddToScheme(s); err != nil {
@@ -153,8 +153,8 @@ func waitForObject(ctx context.Context, c client.Client, obj client.Object) erro
 	return nil
 }
 
-func getResourceSummary(resource, helmResource *corev1.ObjectReference) *libsveltosv1alpha1.ResourceSummary {
-	rs := &libsveltosv1alpha1.ResourceSummary{
+func getResourceSummary(resource, helmResource *corev1.ObjectReference) *libsveltosv1beta1.ResourceSummary {
+	rs := &libsveltosv1beta1.ResourceSummary{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      randomString(),
 			Namespace: randomString(),
@@ -162,7 +162,7 @@ func getResourceSummary(resource, helmResource *corev1.ObjectReference) *libsvel
 	}
 
 	if resource != nil {
-		rs.Spec.Resources = []libsveltosv1alpha1.Resource{
+		rs.Spec.Resources = []libsveltosv1beta1.Resource{
 			{
 				Name:      resource.Name,
 				Namespace: resource.Namespace,
@@ -174,12 +174,12 @@ func getResourceSummary(resource, helmResource *corev1.ObjectReference) *libsvel
 	}
 
 	if helmResource != nil {
-		rs.Spec.ChartResources = []libsveltosv1alpha1.HelmResources{
+		rs.Spec.ChartResources = []libsveltosv1beta1.HelmResources{
 			{
 				ChartName:        randomString(),
 				ReleaseName:      randomString(),
 				ReleaseNamespace: randomString(),
-				Resources: []libsveltosv1alpha1.Resource{
+				Resources: []libsveltosv1beta1.Resource{
 					{
 						Name:      helmResource.Name,
 						Namespace: helmResource.Namespace,
