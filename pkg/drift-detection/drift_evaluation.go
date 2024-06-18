@@ -29,7 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
 	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
 )
@@ -201,7 +201,7 @@ func (m *manager) requestReconciliationForResourceSummary(ctx context.Context,
 
 	// Convert unstructured to typed ResourceSummary
 	unstructured := u.UnstructuredContent()
-	var resourceSummary libsveltosv1alpha1.ResourceSummary
+	var resourceSummary libsveltosv1beta1.ResourceSummary
 	err = runtime.DefaultUnstructuredConverter.
 		FromUnstructured(unstructured, &resourceSummary)
 	if err != nil {
@@ -230,7 +230,7 @@ func (m *manager) requestReconciliationForResourceSummary(ctx context.Context,
 	return m.Status().Update(ctx, &resourceSummary)
 }
 
-func (m *manager) getObjectRef(resource *libsveltosv1alpha1.Resource) *corev1.ObjectReference {
+func (m *manager) getObjectRef(resource *libsveltosv1beta1.Resource) *corev1.ObjectReference {
 	gvk := schema.GroupVersionKind{
 		Group:   resource.Group,
 		Version: resource.Version,

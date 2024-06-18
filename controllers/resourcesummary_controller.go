@@ -41,7 +41,7 @@ import (
 
 	driftdetection "github.com/projectsveltos/drift-detection-manager/pkg/drift-detection"
 	"github.com/projectsveltos/drift-detection-manager/pkg/scope"
-	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
 	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
 )
@@ -71,7 +71,7 @@ type ResourceSummaryReconciler struct {
 	RunMode          Mode
 	ClusterNamespace string
 	ClusterName      string
-	ClusterType      libsveltosv1alpha1.ClusterType
+	ClusterType      libsveltosv1beta1.ClusterType
 
 	// Used to update internal maps and sets
 	Mux sync.RWMutex
@@ -99,7 +99,7 @@ func (r *ResourceSummaryReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	logger.V(logs.LogInfo).Info("Reconciling")
 
 	// Fecth the ResourceSummary instance
-	resourceSummary := &libsveltosv1alpha1.ResourceSummary{}
+	resourceSummary := &libsveltosv1beta1.ResourceSummary{}
 	err := r.Get(ctx, req.NamespacedName, resourceSummary)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
@@ -160,8 +160,8 @@ func (r *ResourceSummaryReconciler) reconcileDelete(
 		return err
 	}
 
-	if controllerutil.ContainsFinalizer(resourceSummary, libsveltosv1alpha1.ResourceSummaryFinalizer) {
-		controllerutil.RemoveFinalizer(resourceSummary, libsveltosv1alpha1.ResourceSummaryFinalizer)
+	if controllerutil.ContainsFinalizer(resourceSummary, libsveltosv1beta1.ResourceSummaryFinalizer) {
+		controllerutil.RemoveFinalizer(resourceSummary, libsveltosv1beta1.ResourceSummaryFinalizer)
 	}
 
 	logger.V(logs.LogInfo).Info("reconciliation delete succeeded")
@@ -177,7 +177,7 @@ func (r *ResourceSummaryReconciler) reconcileNormal(ctx context.Context,
 
 	resourceSummary := resourceSummaryScope.ResourceSummary
 
-	if !controllerutil.ContainsFinalizer(resourceSummary, libsveltosv1alpha1.ResourceSummaryFinalizer) {
+	if !controllerutil.ContainsFinalizer(resourceSummary, libsveltosv1beta1.ResourceSummaryFinalizer) {
 		if err := r.addFinalizer(ctx, resourceSummary, logger); err != nil {
 			logger.V(logs.LogInfo).Info("failed to update finalizer")
 			return err
@@ -198,7 +198,7 @@ func (r *ResourceSummaryReconciler) reconcileNormal(ctx context.Context,
 // SetupWithManager sets up the controller with the Manager.
 func (r *ResourceSummaryReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	_, err := ctrl.NewControllerManagedBy(mgr).
-		For(&libsveltosv1alpha1.ResourceSummary{}).
+		For(&libsveltosv1beta1.ResourceSummary{}).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: 15,
 		}).
@@ -210,11 +210,11 @@ func (r *ResourceSummaryReconciler) SetupWithManager(ctx context.Context, mgr ct
 	return nil
 }
 
-func (r *ResourceSummaryReconciler) addFinalizer(ctx context.Context, resourceSummary *libsveltosv1alpha1.ResourceSummary,
+func (r *ResourceSummaryReconciler) addFinalizer(ctx context.Context, resourceSummary *libsveltosv1beta1.ResourceSummary,
 	logger logr.Logger) error {
 
 	// If the SveltosCluster doesn't have our finalizer, add it.
-	controllerutil.AddFinalizer(resourceSummary, libsveltosv1alpha1.ResourceSummaryFinalizer)
+	controllerutil.AddFinalizer(resourceSummary, libsveltosv1beta1.ResourceSummaryFinalizer)
 
 	helper, err := patch.NewHelper(resourceSummary, r.Client)
 	if err != nil {
@@ -237,9 +237,9 @@ func (r *ResourceSummaryReconciler) addFinalizer(ctx context.Context, resourceSu
 
 // getChartResource  gets all resources considering an Helm chart
 func (r *ResourceSummaryReconciler) getChartResource(ctx context.Context,
-	helmResource *libsveltosv1alpha1.HelmResources) ([]libsveltosv1alpha1.Resource, error) {
+	helmResource *libsveltosv1beta1.HelmResources) ([]libsveltosv1beta1.Resource, error) {
 
-	resources := make([]libsveltosv1alpha1.Resource, len(helmResource.Resources))
+	resources := make([]libsveltosv1beta1.Resource, len(helmResource.Resources))
 
 	copy(resources, helmResource.Resources)
 
@@ -282,9 +282,9 @@ func (r *ResourceSummaryReconciler) getChartResource(ctx context.Context,
 
 // getHelmResources gets all resources considering all the Helm charts in a ResourceSummary
 func (r *ResourceSummaryReconciler) getHelmResources(ctx context.Context,
-	resourceSummary *libsveltosv1alpha1.ResourceSummary) ([]libsveltosv1alpha1.Resource, error) {
+	resourceSummary *libsveltosv1beta1.ResourceSummary) ([]libsveltosv1beta1.Resource, error) {
 
-	resources := make([]libsveltosv1alpha1.Resource, 0)
+	resources := make([]libsveltosv1beta1.Resource, 0)
 
 	for i := range resourceSummary.Spec.ChartResources {
 		chartResources, err := r.getChartResource(ctx, &resourceSummary.Spec.ChartResources[i])
@@ -298,16 +298,16 @@ func (r *ResourceSummaryReconciler) getHelmResources(ctx context.Context,
 }
 
 // getResources gets all resources in a ResourceSummary
-func (r *ResourceSummaryReconciler) getResources(resourceSummary *libsveltosv1alpha1.ResourceSummary,
-) []libsveltosv1alpha1.Resource {
+func (r *ResourceSummaryReconciler) getResources(resourceSummary *libsveltosv1beta1.ResourceSummary,
+) []libsveltosv1beta1.Resource {
 
-	resources := make([]libsveltosv1alpha1.Resource, len(resourceSummary.Spec.Resources))
+	resources := make([]libsveltosv1beta1.Resource, len(resourceSummary.Spec.Resources))
 	copy(resources, resourceSummary.Spec.Resources)
 
 	return resources
 }
 
-func (r *ResourceSummaryReconciler) getObjectRef(resource *libsveltosv1alpha1.Resource) *corev1.ObjectReference {
+func (r *ResourceSummaryReconciler) getObjectRef(resource *libsveltosv1beta1.Resource) *corev1.ObjectReference {
 	gvk := schema.GroupVersionKind{
 		Group:   resource.Group,
 		Version: resource.Version,
@@ -326,7 +326,7 @@ func (r *ResourceSummaryReconciler) getObjectRef(resource *libsveltosv1alpha1.Re
 
 // cleanMaps using resources referenced in last reconciliation by ResourceSummary,
 // clean internal maps and stops tracking such resources
-func (r *ResourceSummaryReconciler) cleanMaps(resourceSummary *libsveltosv1alpha1.ResourceSummary,
+func (r *ResourceSummaryReconciler) cleanMaps(resourceSummary *libsveltosv1beta1.ResourceSummary,
 	logger logr.Logger) error {
 
 	r.Mux.Lock()
@@ -368,7 +368,7 @@ func (r *ResourceSummaryReconciler) cleanMaps(resourceSummary *libsveltosv1alpha
 // updateMaps gets all resources referenced in a ResourceSummary.
 // Updates map with all specific resource to watch and starts tracking those
 func (r *ResourceSummaryReconciler) updateMaps(ctx context.Context,
-	resourceSummary *libsveltosv1alpha1.ResourceSummary, logger logr.Logger) error {
+	resourceSummary *libsveltosv1beta1.ResourceSummary, logger logr.Logger) error {
 
 	// Get resources currently listed in ResourceSummary. Both resources deployed because
 	// of referenced ConfigMaps/Secrets and resources deployed because of helm charts.
@@ -384,13 +384,13 @@ func (r *ResourceSummaryReconciler) updateMaps(ctx context.Context,
 
 	logger.V(logs.LogDebug).Info("register referenced resources")
 
-	var resourceHashes []libsveltosv1alpha1.ResourceHash
+	var resourceHashes []libsveltosv1beta1.ResourceHash
 	resourceHashes, err = r.registerResources(ctx, resources, resourceSummary, false, logger)
 	if err != nil {
 		return err
 	}
 
-	var helmResourceHashes []libsveltosv1alpha1.ResourceHash
+	var helmResourceHashes []libsveltosv1beta1.ResourceHash
 	helmResourceHashes, err = r.registerResources(ctx, helmResources, resourceSummary, true, logger)
 	if err != nil {
 		return err
@@ -445,8 +445,8 @@ func (r *ResourceSummaryReconciler) updateMaps(ctx context.Context,
 }
 
 func (r *ResourceSummaryReconciler) registerResources(ctx context.Context,
-	resources []libsveltosv1alpha1.Resource, resourceSummary *libsveltosv1alpha1.ResourceSummary,
-	isHelm bool, logger logr.Logger) ([]libsveltosv1alpha1.ResourceHash, error) {
+	resources []libsveltosv1beta1.Resource, resourceSummary *libsveltosv1beta1.ResourceSummary,
+	isHelm bool, logger logr.Logger) ([]libsveltosv1beta1.ResourceHash, error) {
 
 	manager, err := driftdetection.GetManager()
 	if err != nil {
@@ -456,7 +456,7 @@ func (r *ResourceSummaryReconciler) registerResources(ctx context.Context,
 	requestor := getKeyFromObject(r.Scheme, resourceSummary)
 
 	logger.V(logs.LogDebug).Info("registered referenced resources")
-	resourceHashes := make([]libsveltosv1alpha1.ResourceHash, len(resources))
+	resourceHashes := make([]libsveltosv1beta1.ResourceHash, len(resources))
 	hashIndex := 0
 	for i := range resources {
 		objRef := r.getObjectRef(&resources[i])
@@ -464,7 +464,7 @@ func (r *ResourceSummaryReconciler) registerResources(ctx context.Context,
 		if err != nil {
 			return nil, err
 		}
-		resourceHashes[hashIndex] = libsveltosv1alpha1.ResourceHash{
+		resourceHashes[hashIndex] = libsveltosv1beta1.ResourceHash{
 			Resource: resources[i],
 			Hash:     fmt.Sprintf("%x", currentHash),
 		}
@@ -475,7 +475,7 @@ func (r *ResourceSummaryReconciler) registerResources(ctx context.Context,
 }
 
 func (r *ResourceSummaryReconciler) unregisterResources(resources []corev1.ObjectReference,
-	resourceSummary *libsveltosv1alpha1.ResourceSummary, isHelm bool) error {
+	resourceSummary *libsveltosv1beta1.ResourceSummary, isHelm bool) error {
 
 	manager, err := driftdetection.GetManager()
 	if err != nil {

@@ -27,7 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/projectsveltos/drift-detection-manager/pkg/scope"
-	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 )
 
 const (
@@ -37,14 +37,14 @@ const (
 )
 
 var _ = Describe("ResourceSummaryScope", func() {
-	var resourceSummary *libsveltosv1alpha1.ResourceSummary
+	var resourceSummary *libsveltosv1beta1.ResourceSummary
 	var c client.Client
 	var logger logr.Logger
 
 	BeforeEach(func() {
 		logger = textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1)))
 
-		resourceSummary = &libsveltosv1alpha1.ResourceSummary{
+		resourceSummary = &libsveltosv1beta1.ResourceSummary{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: resourceSummaryNamePrefix + randomString(),
 			},

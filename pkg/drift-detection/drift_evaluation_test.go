@@ -30,7 +30,7 @@ import (
 	"k8s.io/klog/v2/textlogger"
 
 	driftdetection "github.com/projectsveltos/drift-detection-manager/pkg/drift-detection"
-	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 )
 
 const (
@@ -40,7 +40,7 @@ const (
 var _ = Describe("Manager: drift evaluation", func() {
 	var watcherCtx context.Context
 	var resource corev1.ServiceAccount
-	var resourceSummary *libsveltosv1alpha1.ResourceSummary
+	var resourceSummary *libsveltosv1beta1.ResourceSummary
 
 	BeforeEach(func() {
 		driftdetection.Reset()
@@ -69,7 +69,7 @@ var _ = Describe("Manager: drift evaluation", func() {
 	})
 
 	AfterEach(func() {
-		currentResourceSummaryList := &libsveltosv1alpha1.ResourceSummaryList{}
+		currentResourceSummaryList := &libsveltosv1beta1.ResourceSummaryList{}
 		Expect(testEnv.List(context.TODO(), currentResourceSummaryList)).To(Succeed())
 		for i := range currentResourceSummaryList.Items {
 			Expect(testEnv.Delete(watcherCtx, &currentResourceSummaryList.Items[i])).To(Succeed())
@@ -82,7 +82,7 @@ var _ = Describe("Manager: drift evaluation", func() {
 		logger := textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1)))
 
 		Expect(driftdetection.InitializeManager(watcherCtx, logger, testEnv.Config, testEnv.Client, scheme,
-			randomString(), randomString(), libsveltosv1alpha1.ClusterTypeCapi, evaluateTimeout, false)).To(Succeed())
+			randomString(), randomString(), libsveltosv1beta1.ClusterTypeCapi, evaluateTimeout, false)).To(Succeed())
 		manager, err := driftdetection.GetManager()
 		Expect(err).To(BeNil())
 
@@ -172,7 +172,7 @@ var _ = Describe("Manager: drift evaluation", func() {
 		logger := textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1)))
 
 		Expect(driftdetection.InitializeManager(watcherCtx, logger, testEnv.Config, testEnv.Client, scheme,
-			randomString(), randomString(), libsveltosv1alpha1.ClusterTypeCapi, evaluateTimeout, false)).To(Succeed())
+			randomString(), randomString(), libsveltosv1beta1.ClusterTypeCapi, evaluateTimeout, false)).To(Succeed())
 		manager, err := driftdetection.GetManager()
 		Expect(err).To(BeNil())
 
@@ -199,14 +199,14 @@ var _ = Describe("Manager: drift evaluation", func() {
 		By(fmt.Sprintf("Using ResourceSummary %s/%s", resourceSummary.Namespace, resourceSummary.Name))
 
 		By("Prepare test: prepare ResourceSummary Status")
-		currentResourceSummary := &libsveltosv1alpha1.ResourceSummary{}
+		currentResourceSummary := &libsveltosv1beta1.ResourceSummary{}
 		Expect(testEnv.Get(context.TODO(),
 			types.NamespacedName{Namespace: resourceSummary.Namespace, Name: resourceSummary.Name},
 			currentResourceSummary)).To(Succeed())
-		currentResourceSummary.Status.ResourceHashes = []libsveltosv1alpha1.ResourceHash{
+		currentResourceSummary.Status.ResourceHashes = []libsveltosv1beta1.ResourceHash{
 			{
 				Hash: randomString(),
-				Resource: libsveltosv1alpha1.Resource{
+				Resource: libsveltosv1beta1.Resource{
 					Namespace: resource.Namespace,
 					Name:      resource.Name,
 					Group:     resource.GroupVersionKind().Group,
@@ -247,10 +247,10 @@ var _ = Describe("Manager: drift evaluation", func() {
 	})
 })
 
-func verifyResourceSummary(resourceSummary *libsveltosv1alpha1.ResourceSummary,
+func verifyResourceSummary(resourceSummary *libsveltosv1beta1.ResourceSummary,
 	shouldReconcileResources, shouldReconcileHelmResources bool) {
 
-	currentResourceSummary := &libsveltosv1alpha1.ResourceSummary{}
+	currentResourceSummary := &libsveltosv1beta1.ResourceSummary{}
 
 	Eventually(func() bool {
 		err := testEnv.Get(context.TODO(),
@@ -264,8 +264,8 @@ func verifyResourceSummary(resourceSummary *libsveltosv1alpha1.ResourceSummary,
 	}, timeout, pollingInterval).Should(BeTrue())
 }
 
-func resetResourceSummary(resourceSummary *libsveltosv1alpha1.ResourceSummary) {
-	currentResourceSummary := &libsveltosv1alpha1.ResourceSummary{}
+func resetResourceSummary(resourceSummary *libsveltosv1beta1.ResourceSummary) {
+	currentResourceSummary := &libsveltosv1beta1.ResourceSummary{}
 
 	Expect(testEnv.Get(context.TODO(),
 		types.NamespacedName{Namespace: resourceSummary.Namespace, Name: resourceSummary.Name},

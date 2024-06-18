@@ -33,7 +33,7 @@ import (
 
 	"github.com/projectsveltos/drift-detection-manager/controllers"
 	driftdetection "github.com/projectsveltos/drift-detection-manager/pkg/drift-detection"
-	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
 )
 
@@ -130,7 +130,7 @@ var _ = Describe("ResourceSummary Reconciler", func() {
 
 		// Manager initialization is done within SetupManager. So test calls it directly here.
 		Expect(driftdetection.InitializeManager(watcherCtx, logger, testEnv.Config, testEnv.Client, scheme,
-			randomString(), randomString(), libsveltosv1alpha1.ClusterTypeCapi, evaluateTimeout, false)).To(Succeed())
+			randomString(), randomString(), libsveltosv1beta1.ClusterTypeCapi, evaluateTimeout, false)).To(Succeed())
 
 		Expect(controllers.UpdateMaps(reconciler, context.TODO(), resourceSummary, logger)).To(Succeed())
 		Expect(len(reconciler.ResourceSummaryMap)).To(Equal(1))
@@ -167,13 +167,13 @@ var _ = Describe("ResourceSummary Reconciler", func() {
 		})
 		Expect(err).ToNot(HaveOccurred())
 
-		currentResourceSummary := &libsveltosv1alpha1.ResourceSummary{}
+		currentResourceSummary := &libsveltosv1beta1.ResourceSummary{}
 		err = c.Get(context.TODO(), resourceSummaryName, currentResourceSummary)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(
 			controllerutil.ContainsFinalizer(
 				currentResourceSummary,
-				libsveltosv1alpha1.ResourceSummaryFinalizer,
+				libsveltosv1beta1.ResourceSummaryFinalizer,
 			),
 		).Should(BeTrue())
 	})
@@ -188,7 +188,7 @@ var _ = Describe("ResourceSummary Reconciler", func() {
 			HelmResourceSummaryMap: make(map[corev1.ObjectReference]*libsveltosset.Set),
 		}
 
-		resource1 := libsveltosv1alpha1.Resource{
+		resource1 := libsveltosv1beta1.Resource{
 			Name:      randomString(),
 			Namespace: randomString(),
 			Group:     "apps",
@@ -196,25 +196,25 @@ var _ = Describe("ResourceSummary Reconciler", func() {
 			Version:   "v1",
 		}
 
-		resource2 := libsveltosv1alpha1.Resource{
+		resource2 := libsveltosv1beta1.Resource{
 			Name:    randomString(),
 			Group:   "",
 			Kind:    "Service",
 			Version: "v1",
 		}
 
-		resource3 := libsveltosv1alpha1.Resource{
+		resource3 := libsveltosv1beta1.Resource{
 			Name:    randomString(),
 			Group:   "apiextensions.k8s.io",
 			Kind:    "CustomResourceDefinition",
 			Version: "v1",
 		}
 
-		helmResources := &libsveltosv1alpha1.HelmResources{
+		helmResources := &libsveltosv1beta1.HelmResources{
 			ChartName:        randomString(),
 			ReleaseName:      randomString(),
 			ReleaseNamespace: randomString(),
-			Resources: []libsveltosv1alpha1.Resource{
+			Resources: []libsveltosv1beta1.Resource{
 				resource1, resource2, resource3,
 			},
 		}
@@ -225,7 +225,7 @@ var _ = Describe("ResourceSummary Reconciler", func() {
 		Expect(resources).To(ContainElement(resource1))
 
 		// When namespace is not set, helm chart namespace is used
-		tmpResource2 := libsveltosv1alpha1.Resource{
+		tmpResource2 := libsveltosv1beta1.Resource{
 			Name:      resource2.Name,
 			Namespace: helmResources.ReleaseNamespace,
 			Group:     resource2.Group,
