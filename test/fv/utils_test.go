@@ -27,7 +27,7 @@ import (
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 )
 
-func getResourceSummary(resource, helmResource *corev1.ObjectReference) *libsveltosv1beta1.ResourceSummary {
+func getResourceSummary(resource, helmResource *corev1.ObjectReference, ignore bool) *libsveltosv1beta1.ResourceSummary {
 	rs := &libsveltosv1beta1.ResourceSummary{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      randomString(),
@@ -38,11 +38,12 @@ func getResourceSummary(resource, helmResource *corev1.ObjectReference) *libsvel
 	if resource != nil {
 		rs.Spec.Resources = []libsveltosv1beta1.Resource{
 			{
-				Name:      resource.Name,
-				Namespace: resource.Namespace,
-				Kind:      resource.Kind,
-				Group:     resource.GroupVersionKind().Group,
-				Version:   resource.GroupVersionKind().Version,
+				Name:                        resource.Name,
+				Namespace:                   resource.Namespace,
+				Kind:                        resource.Kind,
+				Group:                       resource.GroupVersionKind().Group,
+				Version:                     resource.GroupVersionKind().Version,
+				IgnoreForConfigurationDrift: ignore,
 			},
 		}
 	}
@@ -55,11 +56,12 @@ func getResourceSummary(resource, helmResource *corev1.ObjectReference) *libsvel
 				ReleaseNamespace: randomString(),
 				Resources: []libsveltosv1beta1.Resource{
 					{
-						Name:      helmResource.Name,
-						Namespace: helmResource.Namespace,
-						Kind:      helmResource.Kind,
-						Group:     helmResource.GroupVersionKind().Group,
-						Version:   helmResource.GroupVersionKind().Version,
+						Name:                        helmResource.Name,
+						Namespace:                   helmResource.Namespace,
+						Kind:                        helmResource.Kind,
+						Group:                       helmResource.GroupVersionKind().Group,
+						Version:                     helmResource.GroupVersionKind().Version,
+						IgnoreForConfigurationDrift: ignore,
 					},
 				},
 			},

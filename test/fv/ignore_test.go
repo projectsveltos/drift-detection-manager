@@ -1,5 +1,5 @@
 /*
-Copyright 2022. projectsveltos.io. All rights reserved.
+Copyright 2024. projectsveltos.io. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,7 +22,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -34,7 +33,7 @@ import (
 
 var _ = Describe("Start watcher", Label("FV"), func() {
 	const (
-		namePrefix = "watcher-"
+		namePrefix = "ignore-"
 	)
 
 	It("Mark ResourceSummary for reconciliation", func() {
@@ -48,17 +47,15 @@ var _ = Describe("Start watcher", Label("FV"), func() {
 		Expect(k8sClient.Create(context.TODO(), namespace))
 
 		By(fmt.Sprintf("Create resourceSummary referencing namespace %s", namespace.Name))
+		By("namespace is marked with IgnoreForConfigurationDrift")
 		Expect(addTypeInformationToObject(scheme, namespace)).To(Succeed())
 		resourceRef := corev1.ObjectReference{
 			Name:       namespace.Name,
 			Kind:       namespace.Kind,
 			APIVersion: namespace.APIVersion,
 		}
-
-		resourceSummary := getResourceSummary(&resourceRef, nil, false)
+		resourceSummary := getResourceSummary(&resourceRef, nil, true)
 		Expect(k8sClient.Create(context.TODO(), resourceSummary)).To(Succeed())
-
-		verifyResourceSummaryResourceHashes(resourceSummary, namespace)
 
 		By("Modify namespace")
 		currentNamespace := &corev1.Namespace{}
@@ -67,41 +64,31 @@ var _ = Describe("Start watcher", Label("FV"), func() {
 		currentNamespace.Labels = map[string]string{randomString(): randomString()}
 		Expect(k8sClient.Update(context.TODO(), currentNamespace)).To(Succeed())
 
-		By(fmt.Sprintf("Verify ResourceSummary %s is marked for reconciliation", resourceSummary.Name))
-		Eventually(func() bool {
+		By(fmt.Sprintf("Verify ResourceSummary %s is NOT marked for reconciliation", resourceSummary.Name))
+		Consistently(func() bool {
 			currentResourceSummary := &libsveltosv1beta1.ResourceSummary{}
 			err := k8sClient.Get(context.TODO(),
 				types.NamespacedName{Namespace: resourceSummary.Namespace, Name: resourceSummary.Name},
 				currentResourceSummary)
-			return err == nil && currentResourceSummary.Status.ResourcesChanged
-		}, timeout, pollingInterval).Should(BeTrue())
-
-		verifyResourceSummaryResourceHashes(resourceSummary, namespace)
-
-		By("Reset ResourceSummary status")
-		currentResourceSummary := &libsveltosv1beta1.ResourceSummary{}
-		Expect(k8sClient.Get(context.TODO(),
-			types.NamespacedName{Namespace: resourceSummary.Namespace, Name: resourceSummary.Name},
-			currentResourceSummary)).To(Succeed())
-		currentResourceSummary.Status.ResourcesChanged = false
-		Expect(k8sClient.Status().Update(context.TODO(), currentResourceSummary)).To(Succeed())
+			return err == nil && !currentResourceSummary.Status.ResourcesChanged
+		}, timeout/2, pollingInterval).Should(BeTrue())
 
 		By(fmt.Sprintf("Delete namespace %s", namespace.Name))
 		Expect(k8sClient.Get(context.TODO(),
 			types.NamespacedName{Name: namespace.Name}, currentNamespace)).To(Succeed())
 		Expect(k8sClient.Delete(context.TODO(), currentNamespace)).To(Succeed())
 
-		By(fmt.Sprintf("Verify ResourceSummary %s is marked for reconciliation", resourceSummary.Name))
-		Eventually(func() bool {
+		By(fmt.Sprintf("Verify ResourceSummary %s is NOT marked for reconciliation", resourceSummary.Name))
+		Consistently(func() bool {
+			currentResourceSummary := &libsveltosv1beta1.ResourceSummary{}
 			err := k8sClient.Get(context.TODO(),
 				types.NamespacedName{Namespace: resourceSummary.Namespace, Name: resourceSummary.Name},
 				currentResourceSummary)
-			return err == nil && currentResourceSummary.Status.ResourcesChanged
-		}, timeout, pollingInterval).Should(BeTrue())
-
-		verifyResourceSummaryResourceHashes(resourceSummary, namespace)
+			return err == nil && !currentResourceSummary.Status.ResourcesChanged
+		}, timeout/2, pollingInterval).Should(BeTrue())
 
 		By("Delete ResourceSummary")
+		currentResourceSummary := &libsveltosv1beta1.ResourceSummary{}
 		Expect(k8sClient.Get(context.TODO(),
 			types.NamespacedName{Namespace: resourceSummary.Namespace, Name: resourceSummary.Name},
 			currentResourceSummary)).To(Succeed())
@@ -116,28 +103,3 @@ var _ = Describe("Start watcher", Label("FV"), func() {
 		}, timeout, pollingInterval).Should(BeTrue())
 	})
 })
-
-func verifyResourceSummaryResourceHashes(resourceSummary *libsveltosv1beta1.ResourceSummary,
-	resource client.Object) {
-
-	By(fmt.Sprintf("Verify ResourceSummary %s/%s contains hash for %s %s/%s",
-		resourceSummary.Namespace, resourceSummary.Name,
-		resource.GetObjectKind().GroupVersionKind().Kind, resource.GetNamespace(), resource.GetName()))
-
-	Eventually(func() bool {
-		currentResourceSummary := &libsveltosv1beta1.ResourceSummary{}
-		err := k8sClient.Get(context.TODO(),
-			types.NamespacedName{Namespace: resourceSummary.Namespace, Name: resourceSummary.Name},
-			currentResourceSummary)
-		if err != nil || currentResourceSummary.Status.ResourceHashes == nil {
-			return false
-		}
-		if len(currentResourceSummary.Status.ResourceHashes) != 1 {
-			return false
-		}
-		return currentResourceSummary.Status.ResourceHashes[0].Resource.Name == resource.GetName() &&
-			currentResourceSummary.Status.ResourceHashes[0].Resource.Namespace == resource.GetNamespace() &&
-			currentResourceSummary.Status.ResourceHashes[0].Resource.Group == resource.GetObjectKind().GroupVersionKind().Group &&
-			currentResourceSummary.Status.ResourceHashes[0].Resource.Kind == resource.GetObjectKind().GroupVersionKind().Kind
-	}, timeout, pollingInterval).Should(BeTrue())
-}
