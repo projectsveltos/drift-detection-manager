@@ -455,10 +455,18 @@ func (r *ResourceSummaryReconciler) registerResources(ctx context.Context,
 
 	requestor := getKeyFromObject(r.Scheme, resourceSummary)
 
-	logger.V(logs.LogDebug).Info("registered referenced resources")
+	logger.V(logs.LogDebug).Info("register referenced resources")
 	resourceHashes := make([]libsveltosv1beta1.ResourceHash, len(resources))
 	hashIndex := 0
 	for i := range resources {
+		if resources[i].IgnoreForConfigurationDrift {
+			l := logger.WithValues("kind", resources[i].Kind)
+			l = l.WithValues("group", resources[i].Group)
+			l = l.WithValues("resource", fmt.Sprintf("%s/%s", resources[i].Namespace, resources[i].Name))
+			l.V(logs.LogInfo).Info("do not track resource for configuration drift")
+			continue
+		}
+
 		objRef := r.getObjectRef(&resources[i])
 		currentHash, err := manager.RegisterResource(ctx, objRef, isHelm, requestor)
 		if err != nil {
