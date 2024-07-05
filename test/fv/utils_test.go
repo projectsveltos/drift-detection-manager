@@ -24,11 +24,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 )
 
-func getResourceSummary(resource, helmResource *corev1.ObjectReference) *libsveltosv1alpha1.ResourceSummary {
-	rs := &libsveltosv1alpha1.ResourceSummary{
+func getResourceSummary(resource, helmResource *corev1.ObjectReference, ignore bool) *libsveltosv1beta1.ResourceSummary {
+	rs := &libsveltosv1beta1.ResourceSummary{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      randomString(),
 			Namespace: "projectsveltos",
@@ -36,30 +36,32 @@ func getResourceSummary(resource, helmResource *corev1.ObjectReference) *libsvel
 	}
 
 	if resource != nil {
-		rs.Spec.Resources = []libsveltosv1alpha1.Resource{
+		rs.Spec.Resources = []libsveltosv1beta1.Resource{
 			{
-				Name:      resource.Name,
-				Namespace: resource.Namespace,
-				Kind:      resource.Kind,
-				Group:     resource.GroupVersionKind().Group,
-				Version:   resource.GroupVersionKind().Version,
+				Name:                        resource.Name,
+				Namespace:                   resource.Namespace,
+				Kind:                        resource.Kind,
+				Group:                       resource.GroupVersionKind().Group,
+				Version:                     resource.GroupVersionKind().Version,
+				IgnoreForConfigurationDrift: ignore,
 			},
 		}
 	}
 
 	if helmResource != nil {
-		rs.Spec.ChartResources = []libsveltosv1alpha1.HelmResources{
+		rs.Spec.ChartResources = []libsveltosv1beta1.HelmResources{
 			{
 				ChartName:        randomString(),
 				ReleaseName:      randomString(),
 				ReleaseNamespace: randomString(),
-				Resources: []libsveltosv1alpha1.Resource{
+				Resources: []libsveltosv1beta1.Resource{
 					{
-						Name:      helmResource.Name,
-						Namespace: helmResource.Namespace,
-						Kind:      helmResource.Kind,
-						Group:     helmResource.GroupVersionKind().Group,
-						Version:   helmResource.GroupVersionKind().Version,
+						Name:                        helmResource.Name,
+						Namespace:                   helmResource.Namespace,
+						Kind:                        helmResource.Kind,
+						Group:                       helmResource.GroupVersionKind().Group,
+						Version:                     helmResource.GroupVersionKind().Version,
+						IgnoreForConfigurationDrift: ignore,
 					},
 				},
 			},

@@ -24,14 +24,14 @@ import (
 	"sigs.k8s.io/cluster-api/util/patch"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 )
 
 // ResourceSummaryScopeParams defines the input parameters used to create a new ResourceSummary Scope.
 type ResourceSummaryScopeParams struct {
 	Client          client.Client
 	Logger          logr.Logger
-	ResourceSummary *libsveltosv1alpha1.ResourceSummary
+	ResourceSummary *libsveltosv1beta1.ResourceSummary
 	ControllerName  string
 }
 
@@ -63,7 +63,7 @@ type ResourceSummaryScope struct {
 	logr.Logger
 	client          client.Client
 	patchHelper     *patch.Helper
-	ResourceSummary *libsveltosv1alpha1.ResourceSummary
+	ResourceSummary *libsveltosv1beta1.ResourceSummary
 	controllerName  string
 }
 

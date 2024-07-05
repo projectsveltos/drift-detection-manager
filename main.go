@@ -47,7 +47,7 @@ import (
 
 	"github.com/projectsveltos/drift-detection-manager/controllers"
 	driftdetection "github.com/projectsveltos/drift-detection-manager/pkg/drift-detection"
-	libsveltosv1alpha1 "github.com/projectsveltos/libsveltos/api/v1alpha1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	"github.com/projectsveltos/libsveltos/lib/clusterproxy"
 	"github.com/projectsveltos/libsveltos/lib/logsettings"
 	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
@@ -126,7 +126,7 @@ func main() {
 	}
 
 	logsettings.RegisterForLogSettings(ctx,
-		libsveltosv1alpha1.ComponentDriftDetectionManager, ctrl.Log.WithName("log-setter"),
+		libsveltosv1beta1.ComponentDriftDetectionManager, ctrl.Log.WithName("log-setter"),
 		restConfig)
 
 	sendUpdates := controllers.SendUpdates // do not send reports
@@ -144,7 +144,7 @@ func main() {
 		HelmResourceSummaryMap: make(map[corev1.ObjectReference]*libsveltosset.Set),
 		ClusterNamespace:       clusterNamespace,
 		ClusterName:            clusterName,
-		ClusterType:            libsveltosv1alpha1.ClusterType(clusterType),
+		ClusterType:            libsveltosv1beta1.ClusterType(clusterType),
 		MapperLock:             sync.Mutex{},
 	}).SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ResourceSummary")
@@ -155,7 +155,7 @@ func main() {
 	setupChecks(mgr)
 
 	go initializeManager(ctx, mgr, sendUpdates, clusterNamespace, clusterName,
-		libsveltosv1alpha1.ClusterType(clusterType), setupLog)
+		libsveltosv1beta1.ClusterType(clusterType), setupLog)
 
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctx); err != nil {
@@ -244,7 +244,7 @@ func setupChecks(mgr ctrl.Manager) {
 }
 
 func initializeManager(ctx context.Context, mgr ctrl.Manager, sendUpdates controllers.Mode,
-	clusterNamespace, clusterName string, clusterType libsveltosv1alpha1.ClusterType,
+	clusterNamespace, clusterName string, clusterType libsveltosv1beta1.ClusterType,
 	logger logr.Logger) {
 
 	const intervalInSecond = 5
@@ -283,7 +283,7 @@ func getManagedClusterRestConfig(ctx context.Context, cfg *rest.Config, logger l
 	if err := clusterv1.AddToScheme(s); err != nil {
 		panic(1)
 	}
-	if err := libsveltosv1alpha1.AddToScheme(s); err != nil {
+	if err := libsveltosv1beta1.AddToScheme(s); err != nil {
 		panic(1)
 	}
 
@@ -297,7 +297,7 @@ func getManagedClusterRestConfig(ctx context.Context, cfg *rest.Config, logger l
 	// It access the managed cluster from here.
 	var currentCfg *rest.Config
 	currentCfg, err = clusterproxy.GetKubernetesRestConfig(ctx, c, clusterNamespace, clusterName, "", "",
-		libsveltosv1alpha1.ClusterType(clusterType), textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1))))
+		libsveltosv1beta1.ClusterType(clusterType), textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1))))
 	if err != nil {
 		logger.V(logsettings.LogInfo).Info(fmt.Sprintf("failed to get secret: %v", err))
 		panic(1)

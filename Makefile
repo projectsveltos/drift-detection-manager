@@ -32,7 +32,7 @@ GOBUILD=go build
 # Define Docker related variables.
 REGISTRY ?= projectsveltos
 IMAGE_NAME ?= drift-detection-manager
-ARCH ?= amd64
+ARCH ?= $(shell go env GOARCH)
 OS ?= $(shell uname -s | tr A-Z a-z)
 K8S_LATEST_VER ?= $(shell curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)
 export CONTROLLER_IMG ?= $(REGISTRY)/$(IMAGE_NAME)
@@ -49,10 +49,10 @@ KUBECTL := $(TOOLS_BIN_DIR)/kubectl
 
 GOLANGCI_LINT_VERSION := "v1.57.2"
 
-KUSTOMIZE_VER := v4.5.2
+KUSTOMIZE_VER := v5.3.0
 KUSTOMIZE_BIN := kustomize
 KUSTOMIZE := $(abspath $(TOOLS_BIN_DIR)/$(KUSTOMIZE_BIN)-$(KUSTOMIZE_VER))
-KUSTOMIZE_PKG := sigs.k8s.io/kustomize/kustomize/v4
+KUSTOMIZE_PKG := sigs.k8s.io/kustomize/kustomize/v5
 $(KUSTOMIZE): # Build kustomize from tools folder.
 	CGO_ENABLED=0 GOBIN=$(TOOLS_BIN_DIR) $(GO_INSTALL) $(KUSTOMIZE_PKG) $(KUSTOMIZE_BIN) $(KUSTOMIZE_VER)
 
@@ -194,7 +194,7 @@ run: manifests generate fmt vet ## Run a controller from your host.
 
 .PHONY: docker-build
 docker-build: ## Build docker image with the manager.
-	docker build --build-arg BUILDOS=linux --build-arg TARGETARCH=amd64 -t $(CONTROLLER_IMG):$(TAG) .
+	docker build --load --build-arg BUILDOS=linux --build-arg TARGETARCH=amd64 -t $(CONTROLLER_IMG):$(TAG) .
 	MANIFEST_IMG=$(CONTROLLER_IMG) MANIFEST_TAG=$(TAG) $(MAKE) set-manifest-image
 	$(MAKE) set-manifest-pull-policy
 
@@ -256,8 +256,8 @@ deploy-projectsveltos: $(KUSTOMIZE)
 	$(MAKE) load-image
 	
 	@echo 'Install libsveltos CRDs'
-	$(KUBECTL) apply -f https://raw.githubusercontent.com/projectsveltos/libsveltos/$(TAG)/config/crd/bases/lib.projectsveltos.io_debuggingconfigurations.yaml
-	$(KUBECTL) apply -f https://raw.githubusercontent.com/projectsveltos/libsveltos/$(TAG)/config/crd/bases/lib.projectsveltos.io_resourcesummaries.yaml
+	$(KUBECTL) apply -f https://raw.githubusercontent.com/projectsveltos/libsveltos/$(TAG)/manifests/apiextensions.k8s.io_v1_customresourcedefinition_debuggingconfigurations.lib.projectsveltos.io.yaml
+	$(KUBECTL) apply -f https://raw.githubusercontent.com/projectsveltos/libsveltos/$(TAG)/manifests/apiextensions.k8s.io_v1_customresourcedefinition_resourcesummaries.lib.projectsveltos.io.yaml
 
 	# Install projectsveltos drift-detection-manager component
 	@echo 'Install projectsveltos drift-detection-manager component'
