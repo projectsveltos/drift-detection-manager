@@ -470,7 +470,10 @@ func (r *ResourceSummaryReconciler) registerResources(ctx context.Context,
 		objRef := r.getObjectRef(&resources[i])
 		currentHash, err := manager.RegisterResource(ctx, objRef, isHelm, requestor)
 		if err != nil {
-			return nil, err
+			if !apierrors.IsNotFound(err) {
+				return nil, err
+			}
+			currentHash = []byte("")
 		}
 		resourceHashes[hashIndex] = libsveltosv1beta1.ResourceHash{
 			Resource: resources[i],
