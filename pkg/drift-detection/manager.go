@@ -39,6 +39,7 @@ import (
 
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
+	"github.com/projectsveltos/libsveltos/lib/patcher"
 	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
 	"github.com/projectsveltos/libsveltos/lib/utils"
 )
@@ -190,7 +191,10 @@ func (m *manager) RegisterResource(ctx context.Context, resourceRef *corev1.Obje
 		return nil, err
 	}
 
-	currentHash := m.unstructuredHash(u)
+	currentHash, err := m.unstructuredHash(u, nil)
+	if err != nil {
+		return nil, err
+	}
 	m.resourceHashes[*resourceRef] = currentHash
 	if err := m.updateGVKMapAndStartWatcher(ctx, resourceRef); err != nil {
 		return nil, err
@@ -349,7 +353,7 @@ func getSortedKeys(inputMap map[string]interface{}) []string {
 // - labels from metadata
 // - any content but metadata and status
 // - does not consider annotation in ConfigMap: annotations are used for leader-election so frequently change
-func (m *manager) unstructuredHash(u *unstructured.Unstructured) []byte {
+func (m *manager) unstructuredHash(u *unstructured.Unstructured, patches []libsveltosv1beta1.Patch) (hash []byte, err error) {
 	h := sha256.New()
 	var config string
 
@@ -367,7 +371,18 @@ func (m *manager) unstructuredHash(u *unstructured.Unstructured) []byte {
 		}
 	}
 
-	content := u.UnstructuredContent()
+	var content map[string]interface{}
+	if len(patches) > 0 {
+		p := &patcher.CustomPatchPostRenderer{Patches: patches}
+		u_slice, err := p.RunUnstructured([]*unstructured.Unstructured{u})
+		if err != nil {
+			return nil, err
+		}
+		content = (*u_slice[0]).UnstructuredContent()
+	} else {
+		content = u.UnstructuredContent()
+	}
+
 	sortedKeys := getSortedKeys(content)
 
 	for _, k := range sortedKeys {
@@ -377,7 +392,7 @@ func (m *manager) unstructuredHash(u *unstructured.Unstructured) []byte {
 	}
 
 	h.Write([]byte(config))
-	return h.Sum(nil)
+	return h.Sum(nil), err
 }
 
 // checkForConfigurationDrift queue resource to be evaluated for configuration drift

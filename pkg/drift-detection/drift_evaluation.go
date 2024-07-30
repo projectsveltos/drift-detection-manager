@@ -105,7 +105,10 @@ func (m *manager) evaluateResource(ctx context.Context, resourceRef *corev1.Obje
 		return err
 	}
 
-	currentHash := m.unstructuredHash(u)
+	currentHash, err := m.unstructuredHash(u, nil)
+	if err != nil {
+		return err
+	}
 
 	if !reflect.DeepEqual(hash, currentHash) {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("resource has been modified. Request reconciliation. Old %x -- Current %x",
