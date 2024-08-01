@@ -135,17 +135,18 @@ func main() {
 	}
 
 	if err = (&controllers.ResourceSummaryReconciler{
-		Client:                 mgr.GetClient(),
-		Config:                 mgr.GetConfig(),
-		Scheme:                 mgr.GetScheme(),
-		RunMode:                sendUpdates,
-		Mux:                    sync.RWMutex{},
-		ResourceSummaryMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
-		HelmResourceSummaryMap: make(map[corev1.ObjectReference]*libsveltosset.Set),
-		ClusterNamespace:       clusterNamespace,
-		ClusterName:            clusterName,
-		ClusterType:            libsveltosv1beta1.ClusterType(clusterType),
-		MapperLock:             sync.Mutex{},
+		Client:                      mgr.GetClient(),
+		Config:                      mgr.GetConfig(),
+		Scheme:                      mgr.GetScheme(),
+		RunMode:                     sendUpdates,
+		Mux:                         sync.RWMutex{},
+		ResourceSummaryMap:          make(map[corev1.ObjectReference]*libsveltosset.Set),
+		HelmResourceSummaryMap:      make(map[corev1.ObjectReference]*libsveltosset.Set),
+		KustomizeResourceSummaryMap: make(map[corev1.ObjectReference]*libsveltosset.Set),
+		ClusterNamespace:            clusterNamespace,
+		ClusterName:                 clusterName,
+		ClusterType:                 libsveltosv1beta1.ClusterType(clusterType),
+		MapperLock:                  sync.Mutex{},
 	}).SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ResourceSummary")
 		os.Exit(1)

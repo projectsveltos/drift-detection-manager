@@ -43,6 +43,14 @@ import (
 	"github.com/projectsveltos/libsveltos/lib/utils"
 )
 
+type ResourceType int
+
+const (
+	Resource ResourceType = iota
+	KustomizeResource
+	HelmResource
+)
+
 var (
 	getManagerLock  = &sync.Mutex{}
 	managerInstance *manager
@@ -90,6 +98,9 @@ type manager struct {
 	// Key: resource to watch, Value: list of ResourceSummary referencing it
 	helmResources map[corev1.ObjectReference]*libsveltosset.Set
 
+	// Key: resource to watch, Value: list of ResourceSummary referencing it
+	kustomizeResources map[corev1.ObjectReference]*libsveltosset.Set
+
 	// List of gvk with a watcher
 	// Key: GroupResourceVersion currently being watched
 	// Value: stop channel
@@ -127,6 +138,7 @@ func InitializeManager(ctx context.Context, l logr.Logger, config *rest.Config, 
 			managerInstance.resourceHashes = make(map[corev1.ObjectReference][]byte)
 			managerInstance.resources = make(map[corev1.ObjectReference]*libsveltosset.Set)
 			managerInstance.helmResources = make(map[corev1.ObjectReference]*libsveltosset.Set)
+			managerInstance.kustomizeResources = make(map[corev1.ObjectReference]*libsveltosset.Set)
 			managerInstance.gvkResources = make(map[schema.GroupVersionKind]*libsveltosset.Set)
 
 			if err := managerInstance.readResourceSummaries(ctx); err != nil {
@@ -154,7 +166,7 @@ func GetManager() (*manager, error) {
 // isHelmResource indicates whether such resource is deployed by Sveltos because of an helm chart
 // (other reason Sveltos deploys a resource is because of referenced ConfigMaps/Secrets)
 // Returns resource current hash or an error if any occurs.
-func (m *manager) RegisterResource(ctx context.Context, resourceRef *corev1.ObjectReference, isHelmResource bool,
+func (m *manager) RegisterResource(ctx context.Context, resourceRef *corev1.ObjectReference, resourceType ResourceType,
 	requestor *corev1.ObjectReference) ([]byte, error) {
 
 	logger := m.log.WithValues("resource", fmt.Sprintf("%s/%s", resourceRef.Namespace, resourceRef.Name))
@@ -166,7 +178,7 @@ func (m *manager) RegisterResource(ctx context.Context, resourceRef *corev1.Obje
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.trackResource(resourceRef, isHelmResource, requestor)
+	m.trackResource(resourceRef, resourceType, requestor)
 
 	v, ok := m.resourceHashes[*resourceRef]
 	if ok {
@@ -186,7 +198,7 @@ func (m *manager) RegisterResource(ctx context.Context, resourceRef *corev1.Obje
 	return currentHash, nil
 }
 
-func (m *manager) UnRegisterResource(resourceRef *corev1.ObjectReference, isHelmResource bool,
+func (m *manager) UnRegisterResource(resourceRef *corev1.ObjectReference, resourceType ResourceType,
 	requestor *corev1.ObjectReference) error {
 
 	logger := m.log.WithValues("resource", fmt.Sprintf("%s/%s", resourceRef.Namespace, resourceRef.Name))
@@ -198,7 +210,8 @@ func (m *manager) UnRegisterResource(resourceRef *corev1.ObjectReference, isHelm
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if isHelmResource {
+	switch resourceType {
+	case HelmResource:
 		if _, ok := m.helmResources[*resourceRef]; !ok {
 			return nil
 		}
@@ -206,7 +219,15 @@ func (m *manager) UnRegisterResource(resourceRef *corev1.ObjectReference, isHelm
 		if m.helmResources[*resourceRef].Len() == 0 {
 			delete(m.helmResources, *resourceRef)
 		}
-	} else {
+	case KustomizeResource:
+		if _, ok := m.kustomizeResources[*resourceRef]; !ok {
+			return nil
+		}
+		m.kustomizeResources[*resourceRef].Erase(requestor)
+		if m.kustomizeResources[*resourceRef].Len() == 0 {
+			delete(m.kustomizeResources, *resourceRef)
+		}
+	case Resource:
 		if _, ok := m.resources[*resourceRef]; !ok {
 			return nil
 		}
@@ -225,27 +246,37 @@ func (m *manager) UnRegisterResource(resourceRef *corev1.ObjectReference, isHelm
 	return nil
 }
 
-func (m *manager) trackResource(resourceRef *corev1.ObjectReference, isHelmResource bool,
+func (m *manager) trackResource(resourceRef *corev1.ObjectReference, resourceType ResourceType,
 	requestor *corev1.ObjectReference) {
 
-	if isHelmResource {
+	switch resourceType {
+	case HelmResource:
 		if _, ok := m.helmResources[*resourceRef]; !ok {
 			m.helmResources[*resourceRef] = &libsveltosset.Set{}
 		}
 		m.helmResources[*resourceRef].Insert(requestor)
 		return
+	case KustomizeResource:
+		if _, ok := m.kustomizeResources[*resourceRef]; !ok {
+			m.kustomizeResources[*resourceRef] = &libsveltosset.Set{}
+		}
+		m.kustomizeResources[*resourceRef].Insert(requestor)
+	case Resource:
+		if _, ok := m.resources[*resourceRef]; !ok {
+			m.resources[*resourceRef] = &libsveltosset.Set{}
+		}
+		m.resources[*resourceRef].Insert(requestor)
 	}
-
-	if _, ok := m.resources[*resourceRef]; !ok {
-		m.resources[*resourceRef] = &libsveltosset.Set{}
-	}
-	m.resources[*resourceRef].Insert(requestor)
 }
 
 // stillTrackingResource returns true if resource is still
 // being tracked. False otherwise
 func (m *manager) stillTrackingResource(resourceRef *corev1.ObjectReference) bool {
 	if _, ok := m.helmResources[*resourceRef]; ok {
+		return true
+	}
+
+	if _, ok := m.kustomizeResources[*resourceRef]; ok {
 		return true
 	}
 
@@ -392,12 +423,17 @@ func (m *manager) readResourceSummary(ctx context.Context, resourceSummary *libs
 ) error {
 
 	if err := m.processResourceHashes(ctx, resourceSummary.Status.ResourceHashes,
-		false, resourceSummary); err != nil {
+		HelmResource, resourceSummary); err != nil {
+		return err
+	}
+
+	if err := m.processResourceHashes(ctx, resourceSummary.Status.KustomizeResourceHashes,
+		KustomizeResource, resourceSummary); err != nil {
 		return err
 	}
 
 	if err := m.processResourceHashes(ctx, resourceSummary.Status.HelmResourceHashes,
-		true, resourceSummary); err != nil {
+		Resource, resourceSummary); err != nil {
 		return err
 	}
 
@@ -405,7 +441,7 @@ func (m *manager) readResourceSummary(ctx context.Context, resourceSummary *libs
 }
 
 func (m *manager) processResourceHashes(ctx context.Context, resourceHashes []libsveltosv1beta1.ResourceHash,
-	isHelm bool, resourceSummary *libsveltosv1beta1.ResourceSummary) error {
+	resourceType ResourceType, resourceSummary *libsveltosv1beta1.ResourceSummary) error {
 
 	resourceSummaryDef := m.getObjectReference(resourceSummary)
 
@@ -414,7 +450,7 @@ func (m *manager) processResourceHashes(ctx context.Context, resourceHashes []li
 		resourceRef := m.getObjectRef(&resource)
 		lastKnownHash := resourceHashes[i].Hash
 
-		currentHash, err := m.RegisterResource(ctx, resourceRef, isHelm, resourceSummaryDef)
+		currentHash, err := m.RegisterResource(ctx, resourceRef, resourceType, resourceSummaryDef)
 		// Override with last known hash
 		m.resourceHashes[*resourceRef] = []byte(resourceHashes[i].Hash)
 

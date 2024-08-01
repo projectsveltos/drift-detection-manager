@@ -128,43 +128,40 @@ func (m *manager) updateResourceHash(resourceRef *corev1.ObjectReference, curren
 func (m *manager) requestReconciliations(ctx context.Context, resourceRef *corev1.ObjectReference,
 	currentHash []byte) error {
 
+	resourceTypes := []ResourceType{Resource, HelmResource, KustomizeResource}
+
 	var resourceSummaries []corev1.ObjectReference
-
-	// Consider resources
-	m.mu.RLock()
-	rsList, ok := m.resources[*resourceRef]
-	if ok {
-		resourceSummaries = rsList.Items()
-	}
-	m.mu.RUnlock()
-
-	for i := range resourceSummaries {
-		l := m.log.WithValues("resourceSummary", fmt.Sprintf("%s/%s",
-			resourceSummaries[i].Namespace, resourceSummaries[i].Name))
-		l.V(logs.LogDebug).Info("create reconciliation request")
-		if err := m.requestReconciliationForResourceSummary(ctx, &resourceSummaries[i],
-			resourceRef, currentHash, false); err != nil {
-			return err
+	for _, resourceType := range resourceTypes {
+		var ok bool
+		var rsList *libsveltosset.Set
+		switch resourceType {
+		case Resource:
+			m.mu.RLock() // Lock only if necessary (see point 4)
+			rsList, ok = m.resources[*resourceRef]
+			m.mu.RUnlock()
+		case HelmResource:
+			m.mu.RLock() // Lock only if necessary
+			rsList, ok = m.helmResources[*resourceRef]
+			m.mu.RUnlock()
+		case KustomizeResource:
+			m.mu.RLock() // Lock only if necessary
+			rsList, ok = m.kustomizeResources[*resourceRef]
+			m.mu.RUnlock()
 		}
-	}
+		if !ok {
+			continue // Early return if not found
+		}
+		resourceSummaries = append(resourceSummaries, rsList.Items()...)
 
-	resourceSummaries = nil
+		for i := range resourceSummaries {
+			l := m.log.WithValues("resourceSummary", fmt.Sprintf("%s/%s",
+				resourceSummaries[i].Namespace, resourceSummaries[i].Name))
+			l.V(logs.LogDebug).Info("create reconciliation request")
 
-	// Consider helm resources
-	m.mu.RLock()
-	rsList, ok = m.helmResources[*resourceRef]
-	if ok {
-		resourceSummaries = rsList.Items()
-	}
-	m.mu.RUnlock()
-
-	for i := range resourceSummaries {
-		l := m.log.WithValues("resourceSummary", fmt.Sprintf("%s/%s",
-			resourceSummaries[i].Namespace, resourceSummaries[i].Name))
-		l.V(logs.LogDebug).Info("create reconciliation request")
-		if err := m.requestReconciliationForResourceSummary(ctx, &resourceSummaries[i],
-			resourceRef, currentHash, true); err != nil {
-			return err
+			if err := m.requestReconciliationForResourceSummary(ctx, &resourceSummaries[i], resourceRef,
+				currentHash, resourceType); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -173,8 +170,8 @@ func (m *manager) requestReconciliations(ctx context.Context, resourceRef *corev
 
 // requestReconciliationForResourceSummary fetches ResourceSummary. If found, it updates
 // ResourceSummary Status by:
-// - marking ResourceSummary for reconciliation (either ResourcesChanged or HelmResourcesChanged
-// is set to true based on isHelm input arg);
+// - marking ResourceSummary for reconciliation (ResourcesChanged, KustomizeResourcesChanged or HelmResourcesChanged
+// is set to true based on resourceType input arg);
 // - ResourceHashes for resourceRef is updated with current hash.
 // Input args:
 // - resourceSummaryRef is reference to the ResourceSummary;
@@ -182,7 +179,7 @@ func (m *manager) requestReconciliations(ctx context.Context, resourceRef *corev
 // - currentHash is current hash of the resource that has drifted;
 func (m *manager) requestReconciliationForResourceSummary(ctx context.Context,
 	resourceSummaryRef, resourceRef *corev1.ObjectReference,
-	currentHash []byte, isHelm bool) error {
+	currentHash []byte, resourceType ResourceType) error {
 
 	logger := m.log.WithValues("resourceSummary", fmt.Sprintf("%s/%s",
 		resourceSummaryRef.Namespace, resourceSummaryRef.Name))
@@ -211,23 +208,37 @@ func (m *manager) requestReconciliationForResourceSummary(ctx context.Context,
 	}
 
 	// Mark resourceSummary for reconciliation
-	if isHelm {
+	switch resourceType {
+	case HelmResource:
 		resourceSummary.Status.HelmResourcesChanged = true
-	} else {
+		resourceSummary.Status.HelmResourceHashes = m.updateResourceSummaryWithHash(
+			resourceSummary.Status.HelmResourceHashes, resourceRef, currentHash)
+	case KustomizeResource:
+		resourceSummary.Status.KustomizeResourcesChanged = true
+		resourceSummary.Status.KustomizeResourceHashes = m.updateResourceSummaryWithHash(
+			resourceSummary.Status.KustomizeResourceHashes, resourceRef, currentHash)
+	case Resource:
 		resourceSummary.Status.ResourcesChanged = true
+		resourceSummary.Status.ResourceHashes = m.updateResourceSummaryWithHash(
+			resourceSummary.Status.ResourceHashes, resourceRef, currentHash)
 	}
 
-	// Update resource hash in ResourceSummary Status
-	for i := range resourceSummary.Status.ResourceHashes {
-		r := resourceSummary.Status.ResourceHashes[i]
+	return m.Status().Update(ctx, &resourceSummary)
+}
+
+func (m *manager) updateResourceSummaryWithHash(resourceHashes []libsveltosv1beta1.ResourceHash,
+	resourceRef *corev1.ObjectReference, currentHash []byte) []libsveltosv1beta1.ResourceHash {
+
+	for i := range resourceHashes {
+		r := resourceHashes[i]
 		objRef := m.getObjectRef(&r.Resource)
 		if reflect.DeepEqual(objRef, resourceRef) {
-			resourceSummary.Status.ResourceHashes[i].Hash = string(currentHash)
+			resourceHashes[i].Hash = string(currentHash)
 			break
 		}
 	}
 
-	return m.Status().Update(ctx, &resourceSummary)
+	return resourceHashes
 }
 
 func (m *manager) getObjectRef(resource *libsveltosv1beta1.Resource) *corev1.ObjectReference {
