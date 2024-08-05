@@ -42,6 +42,15 @@ func (m *manager) GetHelmResources() map[corev1.ObjectReference]*libsveltosset.S
 	return m.helmResources
 }
 
+func (m *manager) GetKustomizeResources() map[corev1.ObjectReference]*libsveltosset.Set {
+	return m.kustomizeResources
+}
+
+func (m *manager) AddKustomizeResource(resource, requestor *corev1.ObjectReference) {
+	m.kustomizeResources[*resource] = &libsveltosset.Set{}
+	m.kustomizeResources[*resource].Insert(requestor)
+}
+
 func (m *manager) GetResourceHashes() map[corev1.ObjectReference][]byte {
 	return m.resourceHashes
 }

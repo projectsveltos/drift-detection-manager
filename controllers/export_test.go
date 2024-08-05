@@ -17,11 +17,12 @@ limitations under the License.
 package controllers
 
 var (
-	UpdateMaps       = (*ResourceSummaryReconciler).updateMaps
-	CleanMaps        = (*ResourceSummaryReconciler).cleanMaps
-	GetResources     = (*ResourceSummaryReconciler).getResources
-	GetHelmResources = (*ResourceSummaryReconciler).getHelmResources
-	GetChartResource = (*ResourceSummaryReconciler).getChartResource
+	UpdateMapsAndResourceSummaryStatus = (*ResourceSummaryReconciler).updateMapsAndResourceSummaryStatus
+	CleanMaps                          = (*ResourceSummaryReconciler).cleanMaps
+	GetResources                       = (*ResourceSummaryReconciler).getResources
+	GetHelmResources                   = (*ResourceSummaryReconciler).getHelmResources
+	GetKustomizeResources              = (*ResourceSummaryReconciler).getKustomizeResources
+	GetChartResource                   = (*ResourceSummaryReconciler).getChartResource
 
 	GetKeyFromObject = getKeyFromObject
 )
