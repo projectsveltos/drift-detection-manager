@@ -23,14 +23,15 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	driftdetection "github.com/projectsveltos/drift-detection-manager/pkg/drift-detection"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
+
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2/textlogger"
-
-	driftdetection "github.com/projectsveltos/drift-detection-manager/pkg/drift-detection"
-	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 )
 
 const (
@@ -100,8 +101,55 @@ var _ = Describe("Manager: drift evaluation", func() {
 
 		// Prepare test. Store resource hash and a resourceSummary referencing one resource
 		// (via Resource)
-		hash := driftdetection.UnstructuredHash(manager, u)
+		hash, err := driftdetection.UnstructuredHash(manager, u, nil)
 		manager.SetResourceHashes(&resourceRef, hash)
+		Expect(err).To(BeNil())
+
+		// Test Patch removing field for purpose of drift detection
+		patches2 := []libsveltosv1beta1.Patch{
+			{
+				Patch: `[{ "op": "remove", "path": "/spec/replicas" }]`,
+				Target: &libsveltosv1beta1.PatchSelector{
+					Version: "v1",
+					Group:   "apps",
+					Kind:    "Deployment",
+					Name:    "test1",
+				},
+			}}
+
+		By("Prepare test: create 2 deployments with same metadata but differing replica counts to ignore replica field for drift detection.")
+		depl1 := unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "apps/v1",
+				"spec": map[string]interface{}{
+					"replicas": 3,
+				},
+				"kind": "Deployment",
+				"metadata": map[string]interface{}{
+					"name": "test1",
+				},
+			},
+		}
+		depl2 := unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "apps/v1",
+				"spec": map[string]interface{}{
+					"replicas": 6,
+				},
+				"kind": "Deployment",
+				"metadata": map[string]interface{}{
+					"name": "test1",
+				},
+			},
+		}
+
+		h1, err := driftdetection.UnstructuredHash(manager, &depl1, patches2)
+		Expect(err).To(BeNil())
+		Expect(h1).ToNot(BeNil())
+		h2, err2 := driftdetection.UnstructuredHash(manager, &depl2, patches2)
+		Expect(err2).To(BeNil())
+		Expect(h2).ToNot(BeNil())
+		Expect(h1).To(BeEquivalentTo(h2))
 
 		By("Prepare test: add ResourceSummary and mark it as referencing resource created above")
 		resourceSummary = getResourceSummary(nil, &resourceRef, nil)
@@ -167,7 +215,8 @@ var _ = Describe("Manager: drift evaluation", func() {
 
 		// Prepare test. Store resource hash and a resourceSummary referencing one resource
 		// (via Resource)
-		hash := driftdetection.UnstructuredHash(manager, u)
+		hash, err := driftdetection.UnstructuredHash(manager, u, nil)
+		Expect(err).To(BeNil())
 		manager.SetResourceHashes(&resourceRef, hash)
 
 		By("Prepare test: add ResourceSummary and mark it as referencing resource created above")
