@@ -17,10 +17,8 @@ limitations under the License.
 package controllers
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 )
@@ -37,37 +35,4 @@ func InitScheme() (*runtime.Scheme, error) {
 		return nil, err
 	}
 	return s, nil
-}
-
-// getKeyFromObject returns the Key that can be used in the internal reconciler maps.
-func getKeyFromObject(scheme *runtime.Scheme, obj client.Object) *corev1.ObjectReference {
-	addTypeInformationToObject(scheme, obj)
-
-	gvk := obj.GetObjectKind().GroupVersionKind()
-	apiVersion, kind := gvk.ToAPIVersionAndKind()
-
-	return &corev1.ObjectReference{
-		Namespace:  obj.GetNamespace(),
-		Name:       obj.GetName(),
-		Kind:       kind,
-		APIVersion: apiVersion,
-	}
-}
-
-func addTypeInformationToObject(scheme *runtime.Scheme, obj client.Object) {
-	gvks, _, err := scheme.ObjectKinds(obj)
-	if err != nil {
-		panic(1)
-	}
-
-	for _, gvk := range gvks {
-		if gvk.Kind == "" {
-			continue
-		}
-		if gvk.Version == "" || gvk.Version == runtime.APIVersionInternal {
-			continue
-		}
-		obj.GetObjectKind().SetGroupVersionKind(gvk)
-		break
-	}
 }

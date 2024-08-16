@@ -36,7 +36,7 @@ var _ = Describe("Start watcher", Label("FV"), func() {
 		namePrefix = "ignore-"
 	)
 
-	It("Mark ResourceSummary for reconciliation", func() {
+	It("Mark ResourceSummary for reconciliation using annotation", func() {
 		namespace := &corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: namePrefix + randomString(),

@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
@@ -105,7 +106,12 @@ func (m *manager) evaluateResource(ctx context.Context, resourceRef *corev1.Obje
 		return err
 	}
 
-	currentHash, err := m.unstructuredHash(u, nil)
+	patches, err := m.getPatches(ctx, resourceRef)
+	if err != nil {
+		return err
+	}
+
+	currentHash, err := m.unstructuredHash(u, patches)
 	if err != nil {
 		return err
 	}
@@ -119,6 +125,58 @@ func (m *manager) evaluateResource(ctx context.Context, resourceRef *corev1.Obje
 
 	logger.V(logs.LogInfo).Info("no configuration drift detected.")
 	return nil
+}
+
+func (m *manager) getResourceSummaries(resourceRef *corev1.ObjectReference) *libsveltosset.Set {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	rsList := &libsveltosset.Set{}
+
+	resourceSummaries, ok := m.resources[*resourceRef]
+	if ok {
+		rsList.Append(resourceSummaries)
+	}
+
+	resourceSummaries, ok = m.helmResources[*resourceRef]
+	if ok {
+		rsList.Append(resourceSummaries)
+	}
+
+	resourceSummaries, ok = m.kustomizeResources[*resourceRef]
+	if ok {
+		rsList.Append(resourceSummaries)
+	}
+
+	return rsList
+}
+
+func (m *manager) getPatches(ctx context.Context, resourceRef *corev1.ObjectReference,
+) ([]libsveltosv1beta1.Patch, error) {
+
+	rs := m.getResourceSummaries(resourceRef)
+	items := rs.Items()
+
+	patches := make([]libsveltosv1beta1.Patch, 0)
+	for i := range items {
+		resourceSummaryRef := &items[i]
+		resourceSummary := &libsveltosv1beta1.ResourceSummary{}
+		err := m.Client.Get(ctx,
+			types.NamespacedName{Namespace: resourceSummaryRef.Namespace, Name: resourceSummaryRef.Name},
+			resourceSummary)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				continue
+			}
+			m.log.V(logs.LogInfo).Info(fmt.Sprintf("failed to get resourceSummary %s/%s",
+				resourceSummaryRef.Namespace, resourceSummaryRef.Name))
+			return nil, err
+		}
+
+		patches = append(patches, resourceSummary.Spec.Patches...)
+	}
+
+	return patches, nil
 }
 
 func (m *manager) updateResourceHash(resourceRef *corev1.ObjectReference, currentHash []byte) {

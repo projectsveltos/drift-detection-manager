@@ -339,7 +339,7 @@ func (r *ResourceSummaryReconciler) getObjectRef(resource *libsveltosv1beta1.Res
 	}
 }
 
-func (r *ResourceSummaryReconciler) unregisterResources(resourceSummaryRef *corev1.ObjectReference,
+func (r *ResourceSummaryReconciler) unregisterResources(resourceSummary *libsveltosv1beta1.ResourceSummary,
 	resources []corev1.ObjectReference, resourceType driftdetection.ResourceType) error {
 
 	manager, err := driftdetection.GetManager()
@@ -348,7 +348,7 @@ func (r *ResourceSummaryReconciler) unregisterResources(resourceSummaryRef *core
 	}
 
 	for i := range resources {
-		if err := manager.UnRegisterResource(&resources[i], resourceType, resourceSummaryRef); err != nil {
+		if err := manager.UnRegisterResource(&resources[i], resourceType, resourceSummary); err != nil {
 			return err
 		}
 	}
@@ -361,39 +361,37 @@ func (r *ResourceSummaryReconciler) unregisterResources(resourceSummaryRef *core
 func (r *ResourceSummaryReconciler) cleanMaps(resourceSummary *libsveltosv1beta1.ResourceSummary,
 	logger logr.Logger) error {
 
-	resourceSummaryRef := getKeyFromObject(r.Scheme, resourceSummary)
-
 	logger.V(logs.LogDebug).Info("unregister resources previously programmed")
 
 	r.Mux.Lock()
 	defer r.Mux.Unlock()
 
-	resourceSet, ok := r.ResourceSummaryMap[*resourceSummaryRef]
-	if ok {
+	resourceSet := r.getMapValue(resourceSummary, driftdetection.Resource)
+	if resourceSet != nil {
 		resources := resourceSet.Items()
-		if err := r.unregisterResources(resourceSummaryRef, resources, driftdetection.Resource); err != nil {
+		if err := r.unregisterResources(resourceSummary, resources, driftdetection.Resource); err != nil {
 			return err
 		}
 	}
-	delete(r.ResourceSummaryMap, *resourceSummaryRef)
+	r.removeMapEntry(resourceSummary, driftdetection.Resource)
 
-	resourceSet = r.KustomizeResourceSummaryMap[*resourceSummaryRef]
-	if ok {
+	resourceSet = r.getMapValue(resourceSummary, driftdetection.KustomizeResource)
+	if resourceSet != nil {
 		resources := resourceSet.Items()
-		if err := r.unregisterResources(resourceSummaryRef, resources, driftdetection.KustomizeResource); err != nil {
+		if err := r.unregisterResources(resourceSummary, resources, driftdetection.KustomizeResource); err != nil {
 			return err
 		}
 	}
-	delete(r.KustomizeResourceSummaryMap, *resourceSummaryRef)
+	r.removeMapEntry(resourceSummary, driftdetection.KustomizeResource)
 
-	resourceSet, ok = r.HelmResourceSummaryMap[*resourceSummaryRef]
-	if ok {
+	resourceSet = r.getMapValue(resourceSummary, driftdetection.HelmResource)
+	if resourceSet != nil {
 		resources := resourceSet.Items()
-		if err := r.unregisterResources(resourceSummaryRef, resources, driftdetection.HelmResource); err != nil {
+		if err := r.unregisterResources(resourceSummary, resources, driftdetection.HelmResource); err != nil {
 			return err
 		}
 	}
-	delete(r.HelmResourceSummaryMap, *resourceSummaryRef)
+	r.removeMapEntry(resourceSummary, driftdetection.HelmResource)
 
 	return nil
 }
@@ -413,13 +411,11 @@ func (r *ResourceSummaryReconciler) updateMapsForResourceType(ctx context.Contex
 		currentObjRefs.Insert(r.getObjectRef(&currentResources[i]))
 	}
 
-	resourceSummaryRef := getKeyFromObject(r.Scheme, resourceSummary)
-
 	logger.V(logs.LogDebug).Info(fmt.Sprintf("unregistered resources not referenced anymore for type %d", resourceType))
 
 	if oldResources != nil {
 		diff := oldResources.Difference(&currentObjRefs)
-		if err := r.unregisterResources(resourceSummaryRef, diff, resourceType); err != nil {
+		if err := r.unregisterResources(resourceSummary, diff, resourceType); err != nil {
 			return err
 		}
 	}
@@ -429,13 +425,13 @@ func (r *ResourceSummaryReconciler) updateMapsForResourceType(ctx context.Contex
 	switch resourceType {
 	case driftdetection.Resource:
 		resourceSummary.Status.ResourceHashes = resourceHashes
-		r.ResourceSummaryMap[*resourceSummaryRef] = &currentObjRefs
+		r.setMapValue(resourceSummary, driftdetection.Resource, &currentObjRefs)
 	case driftdetection.KustomizeResource:
 		resourceSummary.Status.KustomizeResourceHashes = resourceHashes
-		r.KustomizeResourceSummaryMap[*resourceSummaryRef] = &currentObjRefs
+		r.setMapValue(resourceSummary, driftdetection.KustomizeResource, &currentObjRefs)
 	case driftdetection.HelmResource:
 		resourceSummary.Status.HelmResourceHashes = resourceHashes
-		r.HelmResourceSummaryMap[*resourceSummaryRef] = &currentObjRefs
+		r.setMapValue(resourceSummary, driftdetection.HelmResource, &currentObjRefs)
 	}
 
 	return nil
@@ -459,22 +455,20 @@ func (r *ResourceSummaryReconciler) updateMapsAndResourceSummaryStatus(ctx conte
 	r.Mux.Lock()
 	defer r.Mux.Unlock()
 
-	resourceSummaryRef := getKeyFromObject(r.Scheme, resourceSummary)
-
-	err = r.updateMapsForResourceType(ctx, resourceSummary, resources, r.ResourceSummaryMap[*resourceSummaryRef],
-		driftdetection.Resource, logger)
+	err = r.updateMapsForResourceType(ctx, resourceSummary, resources,
+		r.getMapValue(resourceSummary, driftdetection.Resource), driftdetection.Resource, logger)
 	if err != nil {
 		return err
 	}
 
-	err = r.updateMapsForResourceType(ctx, resourceSummary, kustomizeResources, r.KustomizeResourceSummaryMap[*resourceSummaryRef],
-		driftdetection.KustomizeResource, logger)
+	err = r.updateMapsForResourceType(ctx, resourceSummary, kustomizeResources,
+		r.getMapValue(resourceSummary, driftdetection.KustomizeResource), driftdetection.KustomizeResource, logger)
 	if err != nil {
 		return err
 	}
 
-	err = r.updateMapsForResourceType(ctx, resourceSummary, helmResources, r.HelmResourceSummaryMap[*resourceSummaryRef],
-		driftdetection.HelmResource, logger)
+	err = r.updateMapsForResourceType(ctx, resourceSummary, helmResources,
+		r.getMapValue(resourceSummary, driftdetection.HelmResource), driftdetection.HelmResource, logger)
 	if err != nil {
 		return err
 	}
@@ -491,8 +485,6 @@ func (r *ResourceSummaryReconciler) registerResources(ctx context.Context,
 		return nil, err
 	}
 
-	requestor := getKeyFromObject(r.Scheme, resourceSummary)
-
 	logger.V(logs.LogDebug).Info("register referenced resources")
 	resourceHashes := make([]libsveltosv1beta1.ResourceHash, 0)
 	for i := range resources {
@@ -505,7 +497,7 @@ func (r *ResourceSummaryReconciler) registerResources(ctx context.Context,
 		}
 
 		objRef := r.getObjectRef(&resources[i])
-		currentHash, err := manager.RegisterResource(ctx, objRef, resourceType, requestor)
+		currentHash, err := manager.RegisterResource(ctx, objRef, resourceType, resourceSummary)
 		if err != nil {
 			if !apierrors.IsNotFound(err) {
 				return nil, err
@@ -536,4 +528,52 @@ func (r *ResourceSummaryReconciler) getRESTMapper() (*restmapper.DeferredDiscove
 	}
 
 	return r.mapper, nil
+}
+
+func (r *ResourceSummaryReconciler) removeMapEntry(resourceSummary *libsveltosv1beta1.ResourceSummary,
+	resourceType driftdetection.ResourceType) {
+
+	resourceSummaryRef := driftdetection.GetObjectReference(r.Scheme, resourceSummary)
+
+	switch resourceType {
+	case driftdetection.Resource:
+		delete(r.ResourceSummaryMap, *resourceSummaryRef)
+	case driftdetection.KustomizeResource:
+		delete(r.KustomizeResourceSummaryMap, *resourceSummaryRef)
+	case driftdetection.HelmResource:
+		delete(r.HelmResourceSummaryMap, *resourceSummaryRef)
+	}
+}
+
+func (r *ResourceSummaryReconciler) getMapValue(resourceSummary *libsveltosv1beta1.ResourceSummary,
+	resourceType driftdetection.ResourceType) *libsveltosset.Set {
+
+	resourceSummaryRef := driftdetection.GetObjectReference(r.Scheme, resourceSummary)
+
+	var value *libsveltosset.Set
+	switch resourceType {
+	case driftdetection.Resource:
+		value = r.ResourceSummaryMap[*resourceSummaryRef]
+	case driftdetection.KustomizeResource:
+		value = r.KustomizeResourceSummaryMap[*resourceSummaryRef]
+	case driftdetection.HelmResource:
+		value = r.HelmResourceSummaryMap[*resourceSummaryRef]
+	}
+
+	return value
+}
+
+func (r *ResourceSummaryReconciler) setMapValue(resourceSummary *libsveltosv1beta1.ResourceSummary,
+	resourceType driftdetection.ResourceType, value *libsveltosset.Set) {
+
+	resourceSummaryRef := driftdetection.GetObjectReference(r.Scheme, resourceSummary)
+
+	switch resourceType {
+	case driftdetection.Resource:
+		r.ResourceSummaryMap[*resourceSummaryRef] = value
+	case driftdetection.KustomizeResource:
+		r.KustomizeResourceSummaryMap[*resourceSummaryRef] = value
+	case driftdetection.HelmResource:
+		r.HelmResourceSummaryMap[*resourceSummaryRef] = value
+	}
 }
