@@ -184,6 +184,7 @@ var _ = Describe("ResourceSummary Reconciler", func() {
 		Expect(controllers.UpdateMapsAndResourceSummaryStatus(reconciler, context.TODO(), resourceSummary, logger)).To(Succeed())
 
 		resourceSummaryRef := getObjRefFromResourceSummary(resourceSummary)
+
 		watchedResources := reconciler.ResourceSummaryMap[*resourceSummaryRef]
 		Expect(watchedResources.Len()).To(Equal(1))
 		watchedResources = reconciler.KustomizeResourceSummaryMap[*resourceSummaryRef]

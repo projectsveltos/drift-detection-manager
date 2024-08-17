@@ -168,7 +168,9 @@ func GetManager() (*manager, error) {
 // (other reason Sveltos deploys a resource is because of referenced ConfigMaps/Secrets)
 // Returns resource current hash or an error if any occurs.
 func (m *manager) RegisterResource(ctx context.Context, resourceRef *corev1.ObjectReference, resourceType ResourceType,
-	requestor *corev1.ObjectReference) ([]byte, error) {
+	resourceSummary *libsveltosv1beta1.ResourceSummary) ([]byte, error) {
+
+	requestor := GetObjectReference(m.scheme, resourceSummary)
 
 	logger := m.log.WithValues("resource", fmt.Sprintf("%s/%s", resourceRef.Namespace, resourceRef.Name))
 	logger = logger.WithValues("gvk", resourceRef.GroupVersionKind().String())
@@ -191,7 +193,7 @@ func (m *manager) RegisterResource(ctx context.Context, resourceRef *corev1.Obje
 		return nil, err
 	}
 
-	currentHash, err := m.unstructuredHash(u, nil)
+	currentHash, err := m.unstructuredHash(u, resourceSummary.Spec.Patches)
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +205,9 @@ func (m *manager) RegisterResource(ctx context.Context, resourceRef *corev1.Obje
 }
 
 func (m *manager) UnRegisterResource(resourceRef *corev1.ObjectReference, resourceType ResourceType,
-	requestor *corev1.ObjectReference) error {
+	resourceSummary *libsveltosv1beta1.ResourceSummary) error {
+
+	requestor := GetObjectReference(m.scheme, resourceSummary)
 
 	logger := m.log.WithValues("resource", fmt.Sprintf("%s/%s", resourceRef.Namespace, resourceRef.Name))
 	logger = logger.WithValues("gvk", resourceRef.GroupVersionKind().String())
@@ -458,14 +462,12 @@ func (m *manager) readResourceSummary(ctx context.Context, resourceSummary *libs
 func (m *manager) processResourceHashes(ctx context.Context, resourceHashes []libsveltosv1beta1.ResourceHash,
 	resourceType ResourceType, resourceSummary *libsveltosv1beta1.ResourceSummary) error {
 
-	resourceSummaryDef := m.getObjectReference(resourceSummary)
-
 	for i := range resourceHashes {
 		resource := resourceHashes[i].Resource
 		resourceRef := m.getObjectRef(&resource)
 		lastKnownHash := resourceHashes[i].Hash
 
-		currentHash, err := m.RegisterResource(ctx, resourceRef, resourceType, resourceSummaryDef)
+		currentHash, err := m.RegisterResource(ctx, resourceRef, resourceType, resourceSummary)
 		// Override with last known hash
 		m.resourceHashes[*resourceRef] = []byte(resourceHashes[i].Hash)
 
@@ -489,19 +491,22 @@ func (m *manager) processResourceHashes(ctx context.Context, resourceHashes []li
 	return nil
 }
 
-// getKeyFromObject returns the Key that can be used in the internal reconciler maps.
-func (m *manager) getObjectReference(obj client.Object) *corev1.ObjectReference {
-	m.addTypeInformationToObject(m.Scheme(), obj)
+// GetObjectReference returns a corev1.ObjectReference
+func GetObjectReference(scheme *runtime.Scheme, obj client.Object) *corev1.ObjectReference {
+	addTypeInformationToObject(scheme, obj)
+
+	gvk := obj.GetObjectKind().GroupVersionKind()
+	apiVersion, kind := gvk.ToAPIVersionAndKind()
 
 	return &corev1.ObjectReference{
 		Namespace:  obj.GetNamespace(),
 		Name:       obj.GetName(),
-		Kind:       obj.GetObjectKind().GroupVersionKind().Kind,
-		APIVersion: obj.GetObjectKind().GroupVersionKind().String(),
+		Kind:       kind,
+		APIVersion: apiVersion,
 	}
 }
 
-func (m *manager) addTypeInformationToObject(scheme *runtime.Scheme, obj client.Object) {
+func addTypeInformationToObject(scheme *runtime.Scheme, obj client.Object) {
 	gvks, _, err := scheme.ObjectKinds(obj)
 	if err != nil {
 		panic(1)

@@ -23,6 +23,4 @@ var (
 	GetHelmResources                   = (*ResourceSummaryReconciler).getHelmResources
 	GetKustomizeResources              = (*ResourceSummaryReconciler).getKustomizeResources
 	GetChartResource                   = (*ResourceSummaryReconciler).getChartResource
-
-	GetKeyFromObject = getKeyFromObject
 )

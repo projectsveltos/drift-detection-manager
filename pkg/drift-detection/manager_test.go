@@ -74,8 +74,7 @@ var _ = Describe("Manager: registration", func() {
 		}
 
 		resourceSummary := getResourceSummary(&resourceRef, nil, nil)
-		resourceSummaryRef := getObjRefFromResourceSummary(resourceSummary)
-		hash, err := manager.RegisterResource(watcherCtx, &resourceRef, driftdetection.KustomizeResource, resourceSummaryRef)
+		hash, err := manager.RegisterResource(watcherCtx, &resourceRef, driftdetection.KustomizeResource, resourceSummary)
 		Expect(err).To(BeNil())
 
 		resources := manager.GetKustomizeResources()
@@ -111,7 +110,7 @@ var _ = Describe("Manager: registration", func() {
 		Expect(gvkResources.Len()).To(Equal(1))
 		Expect(gvkResources.Items()).To(ContainElement(resourceRef))
 
-		Expect(manager.UnRegisterResource(&resourceRef, driftdetection.KustomizeResource, resourceSummaryRef)).To(Succeed())
+		Expect(manager.UnRegisterResource(&resourceRef, driftdetection.KustomizeResource, resourceSummary)).To(Succeed())
 		resources = manager.GetKustomizeResources()
 		Expect(len(resources)).To(Equal(0))
 		resources = manager.GetResources()

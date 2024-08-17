@@ -209,6 +209,8 @@ func getResourceSummary(resource, kustomizeResource, helmResource *corev1.Object
 		}
 	}
 
+	Expect(addTypeInformationToObject(scheme, rs)).To(Succeed())
+
 	return rs
 }
 
