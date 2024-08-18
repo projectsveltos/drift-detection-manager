@@ -180,7 +180,9 @@ func addTypeInformationToObject(scheme *runtime.Scheme, obj client.Object) error
 	return nil
 }
 
-func getResourceSummary(resource, helmResource *corev1.ObjectReference) *libsveltosv1beta1.ResourceSummary {
+func getResourceSummary(resource, kustomizeResource, helmResource *corev1.ObjectReference,
+) *libsveltosv1beta1.ResourceSummary {
+
 	rs := &libsveltosv1beta1.ResourceSummary{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      randomString(),
@@ -196,6 +198,18 @@ func getResourceSummary(resource, helmResource *corev1.ObjectReference) *libsvel
 				Kind:      resource.Kind,
 				Group:     resource.GroupVersionKind().Group,
 				Version:   resource.GroupVersionKind().Version,
+			},
+		}
+	}
+
+	if kustomizeResource != nil {
+		rs.Spec.KustomizeResources = []libsveltosv1beta1.Resource{
+			{
+				Name:      kustomizeResource.Name,
+				Namespace: kustomizeResource.Namespace,
+				Kind:      kustomizeResource.Kind,
+				Group:     kustomizeResource.GroupVersionKind().Group,
+				Version:   kustomizeResource.GroupVersionKind().Version,
 			},
 		}
 	}

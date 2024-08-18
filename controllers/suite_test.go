@@ -31,6 +31,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/klog/v2"
@@ -100,6 +101,8 @@ var _ = BeforeSuite(func() {
 	Expect(testEnv.Create(ctx, dcCRD)).To(Succeed())
 	Expect(waitForObject(ctx, testEnv.Client, dcCRD)).To(Succeed())
 
+	time.Sleep(time.Second)
+
 	if synced := testEnv.GetCache().WaitForCacheSync(ctx); !synced {
 		time.Sleep(time.Second)
 	}
@@ -153,7 +156,9 @@ func waitForObject(ctx context.Context, c client.Client, obj client.Object) erro
 	return nil
 }
 
-func getResourceSummary(resource, helmResource *corev1.ObjectReference) *libsveltosv1beta1.ResourceSummary {
+func getResourceSummary(resource, kustomizeResource, helmResource *corev1.ObjectReference,
+) *libsveltosv1beta1.ResourceSummary {
+
 	rs := &libsveltosv1beta1.ResourceSummary{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      randomString(),
@@ -169,6 +174,18 @@ func getResourceSummary(resource, helmResource *corev1.ObjectReference) *libsvel
 				Kind:      resource.Kind,
 				Group:     resource.GroupVersionKind().Group,
 				Version:   resource.GroupVersionKind().Version,
+			},
+		}
+	}
+
+	if kustomizeResource != nil {
+		rs.Spec.KustomizeResources = []libsveltosv1beta1.Resource{
+			{
+				Name:      kustomizeResource.Name,
+				Namespace: kustomizeResource.Namespace,
+				Kind:      kustomizeResource.Kind,
+				Group:     kustomizeResource.GroupVersionKind().Group,
+				Version:   kustomizeResource.GroupVersionKind().Version,
 			},
 		}
 	}
@@ -192,6 +209,8 @@ func getResourceSummary(resource, helmResource *corev1.ObjectReference) *libsvel
 		}
 	}
 
+	Expect(addTypeInformationToObject(scheme, rs)).To(Succeed())
+
 	return rs
 }
 
@@ -213,4 +232,21 @@ func addTypeInformationToObject(scheme *runtime.Scheme, obj client.Object) error
 	}
 
 	return nil
+}
+
+func getObjRefFromResourceSummary(resourceSummary *libsveltosv1beta1.ResourceSummary) *corev1.ObjectReference {
+	gvk := schema.GroupVersionKind{
+		Group:   libsveltosv1beta1.GroupVersion.Group,
+		Version: libsveltosv1beta1.GroupVersion.Version,
+		Kind:    libsveltosv1beta1.ResourceSummaryKind,
+	}
+
+	apiVersion, kind := gvk.ToAPIVersionAndKind()
+
+	return &corev1.ObjectReference{
+		Namespace:  resourceSummary.Namespace,
+		Name:       resourceSummary.Name,
+		APIVersion: apiVersion,
+		Kind:       kind,
+	}
 }

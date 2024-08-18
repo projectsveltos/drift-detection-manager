@@ -73,17 +73,19 @@ var _ = Describe("Manager: registration", func() {
 			APIVersion: resource.APIVersion,
 		}
 
-		resourceSummary := getResourceSummary(&resourceRef, nil)
-		resourceSummaryRef := getObjRefFromResourceSummary(resourceSummary)
-		hash, err := manager.RegisterResource(watcherCtx, &resourceRef, false, resourceSummaryRef)
+		resourceSummary := getResourceSummary(&resourceRef, nil, nil)
+		hash, err := manager.RegisterResource(watcherCtx, &resourceRef, driftdetection.KustomizeResource, resourceSummary)
 		Expect(err).To(BeNil())
 
-		resources := manager.GetResources()
+		resources := manager.GetKustomizeResources()
 		Expect(len(resources)).To(Equal(1))
 		consumers := resources[resourceRef]
 		Expect(consumers.Len()).To(Equal(1))
 
 		resources = manager.GetHelmResources()
+		Expect(len(resources)).To(Equal(0))
+
+		resources = manager.GetResources()
 		Expect(len(resources)).To(Equal(0))
 
 		hashes := manager.GetResourceHashes()
@@ -108,7 +110,9 @@ var _ = Describe("Manager: registration", func() {
 		Expect(gvkResources.Len()).To(Equal(1))
 		Expect(gvkResources.Items()).To(ContainElement(resourceRef))
 
-		Expect(manager.UnRegisterResource(&resourceRef, false, resourceSummaryRef)).To(Succeed())
+		Expect(manager.UnRegisterResource(&resourceRef, driftdetection.KustomizeResource, resourceSummary)).To(Succeed())
+		resources = manager.GetKustomizeResources()
+		Expect(len(resources)).To(Equal(0))
 		resources = manager.GetResources()
 		Expect(len(resources)).To(Equal(0))
 		resources = manager.GetHelmResources()
@@ -127,15 +131,44 @@ var _ = Describe("Manager: registration", func() {
 		manager, err := driftdetection.GetManager()
 		Expect(err).To(BeNil())
 
-		Expect(addTypeInformationToObject(scheme, &resource)).To(Succeed())
+		resource1 := corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+			},
+		}
+		Expect(addTypeInformationToObject(scheme, &resource1)).To(Succeed())
 
-		resourceRef := corev1.ObjectReference{
-			Name:       resource.Name,
-			Kind:       resource.Kind,
-			APIVersion: resource.APIVersion,
+		resourceRef1 := corev1.ObjectReference{
+			Name:       resource1.Name,
+			Kind:       resource1.Kind,
+			APIVersion: resource1.APIVersion,
 		}
 
-		resourceSummary := getResourceSummary(&resourceRef, &resourceRef)
+		resource2 := corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+			},
+		}
+		Expect(addTypeInformationToObject(scheme, &resource2)).To(Succeed())
+		resourceRef2 := corev1.ObjectReference{
+			Name:       resource2.Name,
+			Kind:       resource2.Kind,
+			APIVersion: resource2.APIVersion,
+		}
+
+		resource3 := corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: randomString(),
+			},
+		}
+		Expect(addTypeInformationToObject(scheme, &resource3)).To(Succeed())
+		resourceRef3 := corev1.ObjectReference{
+			Name:       resource3.Name,
+			Kind:       resource3.Kind,
+			APIVersion: resource3.APIVersion,
+		}
+
+		resourceSummary := getResourceSummary(&resourceRef1, &resourceRef2, &resourceRef3)
 
 		resourceSummaryNs := &corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
@@ -146,7 +179,6 @@ var _ = Describe("Manager: registration", func() {
 		Expect(waitForObject(watcherCtx, testEnv.Client, resourceSummaryNs)).To(Succeed())
 
 		Expect(testEnv.Create(watcherCtx, resourceSummary)).To(Succeed())
-		Expect(addTypeInformationToObject(scheme, &resource)).To(Succeed())
 		Expect(waitForObject(watcherCtx, testEnv.Client, resourceSummary)).To(Succeed())
 
 		// Update ResourceSummary status
@@ -159,11 +191,23 @@ var _ = Describe("Manager: registration", func() {
 			{
 				Hash: hash,
 				Resource: libsveltosv1beta1.Resource{
-					Kind:      resource.Kind,
-					Group:     resource.GroupVersionKind().Group,
-					Version:   resource.GroupVersionKind().Version,
-					Name:      resource.Name,
-					Namespace: resource.Namespace,
+					Kind:      resource1.Kind,
+					Group:     resource1.GroupVersionKind().Group,
+					Version:   resource1.GroupVersionKind().Version,
+					Name:      resource1.Name,
+					Namespace: resource1.Namespace,
+				},
+			},
+		}
+		currentResourceSummary.Status.KustomizeResourceHashes = []libsveltosv1beta1.ResourceHash{
+			{
+				Hash: hash,
+				Resource: libsveltosv1beta1.Resource{
+					Kind:      resource2.Kind,
+					Group:     resource2.GroupVersionKind().Group,
+					Version:   resource2.GroupVersionKind().Version,
+					Name:      resource2.Name,
+					Namespace: resource2.Namespace,
 				},
 			},
 		}
@@ -171,11 +215,11 @@ var _ = Describe("Manager: registration", func() {
 			{
 				Hash: hash,
 				Resource: libsveltosv1beta1.Resource{
-					Kind:      resource.Kind,
-					Group:     resource.GroupVersionKind().Group,
-					Version:   resource.GroupVersionKind().Version,
-					Name:      resource.Name,
-					Namespace: resource.Namespace,
+					Kind:      resource3.Kind,
+					Group:     resource3.GroupVersionKind().Group,
+					Version:   resource3.GroupVersionKind().Version,
+					Name:      resource3.Name,
+					Namespace: resource3.Namespace,
 				},
 			},
 		}
@@ -187,17 +231,22 @@ var _ = Describe("Manager: registration", func() {
 				types.NamespacedName{Namespace: resourceSummary.Namespace, Name: resourceSummary.Name},
 				currentResourceSummary)
 			return err == nil && currentResourceSummary.Status.ResourceHashes != nil &&
-				currentResourceSummary.Status.HelmResourceHashes != nil
+				currentResourceSummary.Status.HelmResourceHashes != nil &&
+				currentResourceSummary.Status.KustomizeResourceHashes != nil
 		}, timeout, pollingInterval).Should(BeTrue())
 
 		Expect(driftdetection.ReadResourceSummaries(manager, watcherCtx)).To(Succeed())
 
 		Expect(len(manager.GetResources())).To(Equal(1))
+		Expect(len(manager.GetKustomizeResources())).To(Equal(1))
 		Expect(len(manager.GetHelmResources())).To(Equal(1))
 		// ResourceSummary Status was set with a random hash for resource.
 		// Resource has not been created by this test. So manager needs to detect that condition
 		// (resource missing) as potential configuration drift which needs evaluation.
-		Expect(manager.GetJobQueue().Len()).To(Equal(1))
+		queue := manager.GetJobQueue()
+		Expect(queue.Has(&resourceRef1)).To(BeTrue())
+		Expect(queue.Has(&resourceRef2)).To(BeTrue())
+		Expect(queue.Has(&resourceRef3)).To(BeTrue())
 	})
 })
 

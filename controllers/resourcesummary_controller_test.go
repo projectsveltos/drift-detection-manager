@@ -70,37 +70,85 @@ var _ = Describe("ResourceSummary Reconciler", func() {
 	})
 
 	It("getResources returns resources", func() {
-		resourceSummary := getResourceSummary(&resourceRef, nil)
+		resourceSummary := getResourceSummary(&resourceRef, nil, nil)
 
 		reconciler := &controllers.ResourceSummaryReconciler{
-			Client:                 testEnv.Client,
-			Scheme:                 scheme,
-			Mux:                    sync.RWMutex{},
-			ResourceSummaryMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
-			HelmResourceSummaryMap: make(map[corev1.ObjectReference]*libsveltosset.Set),
+			Config:                      testEnv.Config,
+			Client:                      testEnv.Client,
+			Scheme:                      scheme,
+			Mux:                         sync.RWMutex{},
+			ResourceSummaryMap:          make(map[corev1.ObjectReference]*libsveltosset.Set),
+			HelmResourceSummaryMap:      make(map[corev1.ObjectReference]*libsveltosset.Set),
+			KustomizeResourceSummaryMap: make(map[corev1.ObjectReference]*libsveltosset.Set),
 		}
 
 		resources := controllers.GetResources(reconciler, resourceSummary)
 		Expect(len(resources)).To(Equal(1))
+
+		kustomizeResources := controllers.GetKustomizeResources(reconciler, resourceSummary)
+		Expect(len(kustomizeResources)).To(Equal(0))
+
 		helmResources, err := controllers.GetHelmResources(reconciler, context.TODO(), resourceSummary)
 		Expect(err).To(BeNil())
 		Expect(len(helmResources)).To(Equal(0))
 	})
 
-	It("getHelmResources returns resources", func() {
-		resourceSummary := getResourceSummary(nil, &resourceRef)
+	It("getResources returns all (kustomize, helm and resource) resources", func() {
+		resourceRef1 := corev1.ObjectReference{
+			Name:       resource.Name,
+			Kind:       resource.Kind,
+			APIVersion: resource.APIVersion,
+		}
+		resourceRef2 := corev1.ObjectReference{
+			Name:       resource.Name,
+			Kind:       resource.Kind,
+			APIVersion: resource.APIVersion,
+		}
+		resourceRef3 := corev1.ObjectReference{
+			Name:       resource.Name,
+			Kind:       resource.Kind,
+			APIVersion: resource.APIVersion,
+		}
+		resourceSummary := getResourceSummary(&resourceRef1, &resourceRef2, &resourceRef3)
 
 		reconciler := &controllers.ResourceSummaryReconciler{
-			Config:                 testEnv.Config,
-			Client:                 testEnv.Client,
-			Scheme:                 scheme,
-			Mux:                    sync.RWMutex{},
-			ResourceSummaryMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
-			HelmResourceSummaryMap: make(map[corev1.ObjectReference]*libsveltosset.Set),
+			Config:                      testEnv.Config,
+			Client:                      testEnv.Client,
+			Scheme:                      scheme,
+			Mux:                         sync.RWMutex{},
+			ResourceSummaryMap:          make(map[corev1.ObjectReference]*libsveltosset.Set),
+			HelmResourceSummaryMap:      make(map[corev1.ObjectReference]*libsveltosset.Set),
+			KustomizeResourceSummaryMap: make(map[corev1.ObjectReference]*libsveltosset.Set),
+		}
+
+		resources := controllers.GetResources(reconciler, resourceSummary)
+		Expect(len(resources)).To(Equal(1))
+
+		kustomizeResources := controllers.GetKustomizeResources(reconciler, resourceSummary)
+		Expect(len(kustomizeResources)).To(Equal(1))
+
+		helmResources, err := controllers.GetHelmResources(reconciler, context.TODO(), resourceSummary)
+		Expect(err).To(BeNil())
+		Expect(len(helmResources)).To(Equal(1))
+	})
+
+	It("getHelmResources returns resources", func() {
+		resourceSummary := getResourceSummary(nil, nil, &resourceRef)
+
+		reconciler := &controllers.ResourceSummaryReconciler{
+			Config:                      testEnv.Config,
+			Client:                      testEnv.Client,
+			Scheme:                      scheme,
+			Mux:                         sync.RWMutex{},
+			ResourceSummaryMap:          make(map[corev1.ObjectReference]*libsveltosset.Set),
+			HelmResourceSummaryMap:      make(map[corev1.ObjectReference]*libsveltosset.Set),
+			KustomizeResourceSummaryMap: make(map[corev1.ObjectReference]*libsveltosset.Set),
 		}
 
 		resources := controllers.GetResources(reconciler, resourceSummary)
 		Expect(len(resources)).To(Equal(0))
+		kustomizeResources := controllers.GetKustomizeResources(reconciler, resourceSummary)
+		Expect(len(kustomizeResources)).To(Equal(0))
 		helmResources, err := controllers.GetHelmResources(reconciler, context.TODO(), resourceSummary)
 		Expect(err).To(BeNil())
 		Expect(len(helmResources)).To(Equal(1))
@@ -116,14 +164,15 @@ var _ = Describe("ResourceSummary Reconciler", func() {
 			Kind:       resource.Kind,
 			APIVersion: resource.APIVersion,
 		}
-		resourceSummary := getResourceSummary(&resourceRef, nil)
+		resourceSummary := getResourceSummary(&resourceRef, nil, nil)
 
 		reconciler := &controllers.ResourceSummaryReconciler{
-			Client:                 testEnv.Client,
-			Scheme:                 scheme,
-			Mux:                    sync.RWMutex{},
-			ResourceSummaryMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
-			HelmResourceSummaryMap: make(map[corev1.ObjectReference]*libsveltosset.Set),
+			Client:                      testEnv.Client,
+			Scheme:                      scheme,
+			Mux:                         sync.RWMutex{},
+			ResourceSummaryMap:          make(map[corev1.ObjectReference]*libsveltosset.Set),
+			HelmResourceSummaryMap:      make(map[corev1.ObjectReference]*libsveltosset.Set),
+			KustomizeResourceSummaryMap: make(map[corev1.ObjectReference]*libsveltosset.Set),
 		}
 
 		logger := textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1)))
@@ -132,17 +181,28 @@ var _ = Describe("ResourceSummary Reconciler", func() {
 		Expect(driftdetection.InitializeManager(watcherCtx, logger, testEnv.Config, testEnv.Client, scheme,
 			randomString(), randomString(), libsveltosv1beta1.ClusterTypeCapi, evaluateTimeout, false)).To(Succeed())
 
-		Expect(controllers.UpdateMaps(reconciler, context.TODO(), resourceSummary, logger)).To(Succeed())
-		Expect(len(reconciler.ResourceSummaryMap)).To(Equal(1))
-		Expect(len(reconciler.HelmResourceSummaryMap)).To(Equal(0))
+		Expect(controllers.UpdateMapsAndResourceSummaryStatus(reconciler, context.TODO(), resourceSummary, logger)).To(Succeed())
+
+		resourceSummaryRef := getObjRefFromResourceSummary(resourceSummary)
+
+		watchedResources := reconciler.ResourceSummaryMap[*resourceSummaryRef]
+		Expect(watchedResources.Len()).To(Equal(1))
+		watchedResources = reconciler.KustomizeResourceSummaryMap[*resourceSummaryRef]
+		Expect(watchedResources.Len()).To(Equal(0))
+		watchedResources = reconciler.HelmResourceSummaryMap[*resourceSummaryRef]
+		Expect(watchedResources.Len()).To(Equal(0))
 
 		Expect(controllers.CleanMaps(reconciler, resourceSummary, logger)).To(Succeed())
-		Expect(len(reconciler.ResourceSummaryMap)).To(Equal(0))
-		Expect(len(reconciler.HelmResourceSummaryMap)).To(Equal(0))
+		_, ok := reconciler.ResourceSummaryMap[*resourceSummaryRef]
+		Expect(ok).To(BeFalse())
+		_, ok = reconciler.KustomizeResourceSummaryMap[*resourceSummaryRef]
+		Expect(ok).To(BeFalse())
+		_, ok = reconciler.HelmResourceSummaryMap[*resourceSummaryRef]
+		Expect(ok).To(BeFalse())
 	})
 
 	It("Adds finalizer", func() {
-		resourceSummary := getResourceSummary(nil, nil)
+		resourceSummary := getResourceSummary(nil, nil, nil)
 
 		initObjects := []client.Object{
 			resourceSummary,
@@ -151,11 +211,12 @@ var _ = Describe("ResourceSummary Reconciler", func() {
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(initObjects...).Build()
 
 		reconciler := &controllers.ResourceSummaryReconciler{
-			Client:                 c,
-			Scheme:                 scheme,
-			Mux:                    sync.RWMutex{},
-			ResourceSummaryMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
-			HelmResourceSummaryMap: make(map[corev1.ObjectReference]*libsveltosset.Set),
+			Client:                      c,
+			Scheme:                      scheme,
+			Mux:                         sync.RWMutex{},
+			ResourceSummaryMap:          make(map[corev1.ObjectReference]*libsveltosset.Set),
+			HelmResourceSummaryMap:      make(map[corev1.ObjectReference]*libsveltosset.Set),
+			KustomizeResourceSummaryMap: make(map[corev1.ObjectReference]*libsveltosset.Set),
 		}
 
 		resourceSummaryName := client.ObjectKey{
@@ -180,12 +241,13 @@ var _ = Describe("ResourceSummary Reconciler", func() {
 
 	It("getChartResource collects resources", func() {
 		reconciler := &controllers.ResourceSummaryReconciler{
-			Config:                 testEnv.Config,
-			Client:                 testEnv.Client,
-			Scheme:                 scheme,
-			Mux:                    sync.RWMutex{},
-			ResourceSummaryMap:     make(map[corev1.ObjectReference]*libsveltosset.Set),
-			HelmResourceSummaryMap: make(map[corev1.ObjectReference]*libsveltosset.Set),
+			Config:                      testEnv.Config,
+			Client:                      testEnv.Client,
+			Scheme:                      scheme,
+			Mux:                         sync.RWMutex{},
+			ResourceSummaryMap:          make(map[corev1.ObjectReference]*libsveltosset.Set),
+			HelmResourceSummaryMap:      make(map[corev1.ObjectReference]*libsveltosset.Set),
+			KustomizeResourceSummaryMap: make(map[corev1.ObjectReference]*libsveltosset.Set),
 		}
 
 		resource1 := libsveltosv1beta1.Resource{

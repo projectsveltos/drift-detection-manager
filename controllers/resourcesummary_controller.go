@@ -86,6 +86,11 @@ type ResourceSummaryReconciler struct {
 	// by ResourceSummary.
 	HelmResourceSummaryMap map[corev1.ObjectReference]*libsveltosset.Set
 
+	// key: ResourceSummary; value: set of resources referenced by ResourceSummary
+	// This map is used efficiently stop tracking resources not referenced anynmore
+	// by ResourceSummary.
+	KustomizeResourceSummaryMap map[corev1.ObjectReference]*libsveltosset.Set
+
 	mapper     *restmapper.DeferredDiscoveryRESTMapper
 	MapperLock sync.Mutex
 }
@@ -186,7 +191,7 @@ func (r *ResourceSummaryReconciler) reconcileNormal(ctx context.Context,
 
 	// updates internal maps using resources currently referenced by ResourceSummary.
 	// Start tracking all such resources.
-	if err := r.updateMaps(ctx, resourceSummary, logger); err != nil {
+	if err := r.updateMapsAndResourceSummaryStatus(ctx, resourceSummary, logger); err != nil {
 		logger.V(logs.LogInfo).Info("failed to update maps")
 		return err
 	}
@@ -280,6 +285,16 @@ func (r *ResourceSummaryReconciler) getChartResource(ctx context.Context,
 	return resources, nil
 }
 
+// getKustomizeResources gets all resources considering all the KustomizeResources in a ResourceSummary
+func (r *ResourceSummaryReconciler) getKustomizeResources(resourceSummary *libsveltosv1beta1.ResourceSummary,
+) []libsveltosv1beta1.Resource {
+
+	resources := make([]libsveltosv1beta1.Resource, len(resourceSummary.Spec.KustomizeResources))
+	copy(resources, resourceSummary.Spec.KustomizeResources)
+
+	return resources
+}
+
 // getHelmResources gets all resources considering all the Helm charts in a ResourceSummary
 func (r *ResourceSummaryReconciler) getHelmResources(ctx context.Context,
 	resourceSummary *libsveltosv1beta1.ResourceSummary) ([]libsveltosv1beta1.Resource, error) {
@@ -324,42 +339,99 @@ func (r *ResourceSummaryReconciler) getObjectRef(resource *libsveltosv1beta1.Res
 	}
 }
 
-// cleanMaps using resources referenced in last reconciliation by ResourceSummary,
-// clean internal maps and stops tracking such resources
-func (r *ResourceSummaryReconciler) cleanMaps(resourceSummary *libsveltosv1beta1.ResourceSummary,
-	logger logr.Logger) error {
+func (r *ResourceSummaryReconciler) unregisterResources(resourceSummary *libsveltosv1beta1.ResourceSummary,
+	resources []corev1.ObjectReference, resourceType driftdetection.ResourceType) error {
 
-	r.Mux.Lock()
-	defer r.Mux.Unlock()
-
-	policyRef := getKeyFromObject(r.Scheme, resourceSummary)
 	manager, err := driftdetection.GetManager()
 	if err != nil {
 		return err
 	}
 
-	logger.V(logs.LogDebug).Info("unregister resources previously programmed")
-
-	resourceSet, ok := r.ResourceSummaryMap[*policyRef]
-	if ok {
-		resources := resourceSet.Items()
-		for i := range resources {
-			if err := manager.UnRegisterResource(&resources[i], false, policyRef); err != nil {
-				return err
-			}
+	for i := range resources {
+		if err := manager.UnRegisterResource(&resources[i], resourceType, resourceSummary); err != nil {
+			return err
 		}
-		delete(r.ResourceSummaryMap, *policyRef)
 	}
 
-	resourceSet, ok = r.HelmResourceSummaryMap[*policyRef]
-	if ok {
+	return nil
+}
+
+// cleanMaps using resources referenced in last reconciliation by ResourceSummary,
+// clean internal maps and stops tracking such resources
+func (r *ResourceSummaryReconciler) cleanMaps(resourceSummary *libsveltosv1beta1.ResourceSummary,
+	logger logr.Logger) error {
+
+	logger.V(logs.LogDebug).Info("unregister resources previously programmed")
+
+	r.Mux.Lock()
+	defer r.Mux.Unlock()
+
+	resourceSet := r.getMapValue(resourceSummary, driftdetection.Resource)
+	if resourceSet != nil {
 		resources := resourceSet.Items()
-		for i := range resources {
-			if err := manager.UnRegisterResource(&resources[i], true, policyRef); err != nil {
-				return err
-			}
+		if err := r.unregisterResources(resourceSummary, resources, driftdetection.Resource); err != nil {
+			return err
 		}
-		delete(r.HelmResourceSummaryMap, *policyRef)
+	}
+	r.removeMapEntry(resourceSummary, driftdetection.Resource)
+
+	resourceSet = r.getMapValue(resourceSummary, driftdetection.KustomizeResource)
+	if resourceSet != nil {
+		resources := resourceSet.Items()
+		if err := r.unregisterResources(resourceSummary, resources, driftdetection.KustomizeResource); err != nil {
+			return err
+		}
+	}
+	r.removeMapEntry(resourceSummary, driftdetection.KustomizeResource)
+
+	resourceSet = r.getMapValue(resourceSummary, driftdetection.HelmResource)
+	if resourceSet != nil {
+		resources := resourceSet.Items()
+		if err := r.unregisterResources(resourceSummary, resources, driftdetection.HelmResource); err != nil {
+			return err
+		}
+	}
+	r.removeMapEntry(resourceSummary, driftdetection.HelmResource)
+
+	return nil
+}
+
+func (r *ResourceSummaryReconciler) updateMapsForResourceType(ctx context.Context, resourceSummary *libsveltosv1beta1.ResourceSummary,
+	currentResources []libsveltosv1beta1.Resource, oldResources *libsveltosset.Set, resourceType driftdetection.ResourceType,
+	logger logr.Logger) error {
+
+	logger.V(logs.LogDebug).Info(fmt.Sprintf("register referenced resources for type %d", resourceType))
+	resourceHashes, err := r.registerResources(ctx, currentResources, resourceSummary, resourceType, logger)
+	if err != nil {
+		return err
+	}
+
+	currentObjRefs := libsveltosset.Set{}
+	for i := range currentResources {
+		currentObjRefs.Insert(r.getObjectRef(&currentResources[i]))
+	}
+
+	logger.V(logs.LogDebug).Info(fmt.Sprintf("unregistered resources not referenced anymore for type %d", resourceType))
+
+	if oldResources != nil {
+		diff := oldResources.Difference(&currentObjRefs)
+		if err := r.unregisterResources(resourceSummary, diff, resourceType); err != nil {
+			return err
+		}
+	}
+
+	// This update must happen after above code that cleans resources previously
+	// referenced but not referenced anymore.
+	switch resourceType {
+	case driftdetection.Resource:
+		resourceSummary.Status.ResourceHashes = resourceHashes
+		r.setMapValue(resourceSummary, driftdetection.Resource, &currentObjRefs)
+	case driftdetection.KustomizeResource:
+		resourceSummary.Status.KustomizeResourceHashes = resourceHashes
+		r.setMapValue(resourceSummary, driftdetection.KustomizeResource, &currentObjRefs)
+	case driftdetection.HelmResource:
+		resourceSummary.Status.HelmResourceHashes = resourceHashes
+		r.setMapValue(resourceSummary, driftdetection.HelmResource, &currentObjRefs)
 	}
 
 	return nil
@@ -367,12 +439,13 @@ func (r *ResourceSummaryReconciler) cleanMaps(resourceSummary *libsveltosv1beta1
 
 // updateMaps gets all resources referenced in a ResourceSummary.
 // Updates map with all specific resource to watch and starts tracking those
-func (r *ResourceSummaryReconciler) updateMaps(ctx context.Context,
+func (r *ResourceSummaryReconciler) updateMapsAndResourceSummaryStatus(ctx context.Context,
 	resourceSummary *libsveltosv1beta1.ResourceSummary, logger logr.Logger) error {
 
-	// Get resources currently listed in ResourceSummary. Both resources deployed because
-	// of referenced ConfigMaps/Secrets and resources deployed because of helm charts.
+	// Get resources currently listed in ResourceSummary. Resources deployed because
+	// of PolicyRefs, Kustomize and Helm charts.
 	resources := r.getResources(resourceSummary)
+	kustomizeResources := r.getKustomizeResources(resourceSummary)
 	helmResources, err := r.getHelmResources(ctx, resourceSummary)
 	if err != nil {
 		logger.V(logs.LogInfo).Info(fmt.Sprintf("failed to get helm resources: %v", err))
@@ -382,82 +455,38 @@ func (r *ResourceSummaryReconciler) updateMaps(ctx context.Context,
 	r.Mux.Lock()
 	defer r.Mux.Unlock()
 
-	logger.V(logs.LogDebug).Info("register referenced resources")
-
-	var resourceHashes []libsveltosv1beta1.ResourceHash
-	resourceHashes, err = r.registerResources(ctx, resources, resourceSummary, false, logger)
+	err = r.updateMapsForResourceType(ctx, resourceSummary, resources,
+		r.getMapValue(resourceSummary, driftdetection.Resource), driftdetection.Resource, logger)
 	if err != nil {
 		return err
 	}
 
-	var helmResourceHashes []libsveltosv1beta1.ResourceHash
-	helmResourceHashes, err = r.registerResources(ctx, helmResources, resourceSummary, true, logger)
+	err = r.updateMapsForResourceType(ctx, resourceSummary, kustomizeResources,
+		r.getMapValue(resourceSummary, driftdetection.KustomizeResource), driftdetection.KustomizeResource, logger)
 	if err != nil {
 		return err
 	}
 
-	// Update current list of resources that needs to be tracked because of
-	// ResourceSummary
-	currentObjRefs := libsveltosset.Set{}
-	for i := range resources {
-		currentObjRefs.Insert(r.getObjectRef(&resources[i]))
+	err = r.updateMapsForResourceType(ctx, resourceSummary, helmResources,
+		r.getMapValue(resourceSummary, driftdetection.HelmResource), driftdetection.HelmResource, logger)
+	if err != nil {
+		return err
 	}
-
-	currentHelmObjRefs := libsveltosset.Set{}
-	for i := range helmResources {
-		currentHelmObjRefs.Insert(r.getObjectRef(&helmResources[i]))
-	}
-
-	logger.V(logs.LogDebug).Info("unregistered resources not referenced anymore")
-	// Stop tracking any resource which was previously referenced by this ResourceSummary
-	// but it is not anymore
-	policyRef := getKeyFromObject(r.Scheme, resourceSummary)
-	oldObjRefs, ok := r.ResourceSummaryMap[*policyRef]
-	if ok {
-		diff := oldObjRefs.Difference(&currentObjRefs)
-		if err := r.unregisterResources(diff, resourceSummary, false); err != nil {
-			return err
-		}
-	}
-
-	oldHelmObjRefs, ok := r.HelmResourceSummaryMap[*policyRef]
-	if ok {
-		diff := oldHelmObjRefs.Difference(&currentHelmObjRefs)
-		if err := r.unregisterResources(diff, resourceSummary, true); err != nil {
-			return err
-		}
-	}
-
-	// Only here update new list of resources referenced by this ResourceSummary.
-	// This update must happen after above code that cleans resources previously
-	// referenced but not referenced anymore.
-	if currentObjRefs.Len() > 0 {
-		r.ResourceSummaryMap[*policyRef] = &currentObjRefs
-	}
-	if currentHelmObjRefs.Len() > 0 {
-		r.HelmResourceSummaryMap[*policyRef] = &currentHelmObjRefs
-	}
-
-	resourceSummary.Status.ResourceHashes = resourceHashes
-	resourceSummary.Status.HelmResourceHashes = helmResourceHashes
 
 	return nil
 }
 
 func (r *ResourceSummaryReconciler) registerResources(ctx context.Context,
 	resources []libsveltosv1beta1.Resource, resourceSummary *libsveltosv1beta1.ResourceSummary,
-	isHelm bool, logger logr.Logger) ([]libsveltosv1beta1.ResourceHash, error) {
+	resourceType driftdetection.ResourceType, logger logr.Logger) ([]libsveltosv1beta1.ResourceHash, error) {
 
 	manager, err := driftdetection.GetManager()
 	if err != nil {
 		return nil, err
 	}
 
-	requestor := getKeyFromObject(r.Scheme, resourceSummary)
-
 	logger.V(logs.LogDebug).Info("register referenced resources")
-	resourceHashes := make([]libsveltosv1beta1.ResourceHash, len(resources))
-	hashIndex := 0
+	resourceHashes := make([]libsveltosv1beta1.ResourceHash, 0)
 	for i := range resources {
 		if resources[i].IgnoreForConfigurationDrift {
 			l := logger.WithValues("kind", resources[i].Kind)
@@ -468,40 +497,20 @@ func (r *ResourceSummaryReconciler) registerResources(ctx context.Context,
 		}
 
 		objRef := r.getObjectRef(&resources[i])
-		currentHash, err := manager.RegisterResource(ctx, objRef, isHelm, requestor)
+		currentHash, err := manager.RegisterResource(ctx, objRef, resourceType, resourceSummary)
 		if err != nil {
 			if !apierrors.IsNotFound(err) {
 				return nil, err
 			}
 			currentHash = []byte("")
 		}
-		resourceHashes[hashIndex] = libsveltosv1beta1.ResourceHash{
+		resourceHashes = append(resourceHashes, libsveltosv1beta1.ResourceHash{
 			Resource: resources[i],
 			Hash:     fmt.Sprintf("%x", currentHash),
-		}
-		hashIndex++
+		})
 	}
 
 	return resourceHashes, nil
-}
-
-func (r *ResourceSummaryReconciler) unregisterResources(resources []corev1.ObjectReference,
-	resourceSummary *libsveltosv1beta1.ResourceSummary, isHelm bool) error {
-
-	manager, err := driftdetection.GetManager()
-	if err != nil {
-		return err
-	}
-
-	requestor := getKeyFromObject(r.Scheme, resourceSummary)
-
-	for i := range resources {
-		if err := manager.UnRegisterResource(&resources[i], isHelm, requestor); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 // getRESTMapper returns DeferredDiscoveryRESTMapper for a given GVK
@@ -519,4 +528,52 @@ func (r *ResourceSummaryReconciler) getRESTMapper() (*restmapper.DeferredDiscove
 	}
 
 	return r.mapper, nil
+}
+
+func (r *ResourceSummaryReconciler) removeMapEntry(resourceSummary *libsveltosv1beta1.ResourceSummary,
+	resourceType driftdetection.ResourceType) {
+
+	resourceSummaryRef := driftdetection.GetObjectReference(r.Scheme, resourceSummary)
+
+	switch resourceType {
+	case driftdetection.Resource:
+		delete(r.ResourceSummaryMap, *resourceSummaryRef)
+	case driftdetection.KustomizeResource:
+		delete(r.KustomizeResourceSummaryMap, *resourceSummaryRef)
+	case driftdetection.HelmResource:
+		delete(r.HelmResourceSummaryMap, *resourceSummaryRef)
+	}
+}
+
+func (r *ResourceSummaryReconciler) getMapValue(resourceSummary *libsveltosv1beta1.ResourceSummary,
+	resourceType driftdetection.ResourceType) *libsveltosset.Set {
+
+	resourceSummaryRef := driftdetection.GetObjectReference(r.Scheme, resourceSummary)
+
+	var value *libsveltosset.Set
+	switch resourceType {
+	case driftdetection.Resource:
+		value = r.ResourceSummaryMap[*resourceSummaryRef]
+	case driftdetection.KustomizeResource:
+		value = r.KustomizeResourceSummaryMap[*resourceSummaryRef]
+	case driftdetection.HelmResource:
+		value = r.HelmResourceSummaryMap[*resourceSummaryRef]
+	}
+
+	return value
+}
+
+func (r *ResourceSummaryReconciler) setMapValue(resourceSummary *libsveltosv1beta1.ResourceSummary,
+	resourceType driftdetection.ResourceType, value *libsveltosset.Set) {
+
+	resourceSummaryRef := driftdetection.GetObjectReference(r.Scheme, resourceSummary)
+
+	switch resourceType {
+	case driftdetection.Resource:
+		r.ResourceSummaryMap[*resourceSummaryRef] = value
+	case driftdetection.KustomizeResource:
+		r.KustomizeResourceSummaryMap[*resourceSummaryRef] = value
+	case driftdetection.HelmResource:
+		r.HelmResourceSummaryMap[*resourceSummaryRef] = value
+	}
 }

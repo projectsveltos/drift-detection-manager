@@ -77,7 +77,7 @@ var _ = Describe("Manager: react", func() {
 		resourceQueued := jobs.Items()
 		Expect(resourceQueued).ToNot(ContainElement(resourceRef))
 
-		resourceSummary := getResourceSummary(&resourceRef, nil)
+		resourceSummary := getResourceSummary(&resourceRef, nil, nil)
 		resourceSummaryRef := getObjRefFromResourceSummary(resourceSummary)
 		manager.AddResource(&resourceRef, resourceSummaryRef)
 		driftdetection.React(manager, &gvk, &resource, logger)
