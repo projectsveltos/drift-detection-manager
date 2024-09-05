@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sync"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -33,11 +34,17 @@ import (
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
 	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
+	"github.com/projectsveltos/libsveltos/lib/sveltos_upgrade"
 )
 
 // evaluateConfigurationDrift evaluates all resources awaiting evaluation for configuration drift
-func (m *manager) evaluateConfigurationDrift(ctx context.Context) {
+func (m *manager) evaluateConfigurationDrift(ctx context.Context, wg *sync.WaitGroup) {
+	var once sync.Once
+
 	for {
+		// Sleep before next evaluation
+		time.Sleep(m.interval)
+
 		m.log.V(logs.LogDebug).Info("Evaluating Configuration drift")
 
 		m.mu.RLock()
@@ -71,8 +78,9 @@ func (m *manager) evaluateConfigurationDrift(ctx context.Context) {
 			m.mu.Unlock()
 		}
 
-		// Sleep before next evaluation
-		time.Sleep(m.interval)
+		once.Do(func() {
+			wg.Done()
+		})
 	}
 }
 
@@ -316,5 +324,19 @@ func (m *manager) getObjectRef(resource *libsveltosv1beta1.Resource) *corev1.Obj
 		Namespace:  resource.Namespace,
 		Name:       resource.Name,
 		APIVersion: apiVersion,
+	}
+}
+
+func (m *manager) storeVersionForCompatibilityChecks(ctx context.Context, version string, wg *sync.WaitGroup) {
+	wg.Wait() // Wait for ResourceSummary to be processed once
+
+	m.log.V(logs.LogInfo).Info(fmt.Sprintf("store version %s for compatibility checks", version))
+	for {
+		err := sveltos_upgrade.StoreDriftDetectionVersion(ctx, m.Client, version)
+		if err == nil {
+			break
+		}
+		m.log.V(logs.LogInfo).Info(fmt.Sprintf("failed to store version %s for compatibility checks: %v", version, err))
+		time.Sleep(time.Second)
 	}
 }

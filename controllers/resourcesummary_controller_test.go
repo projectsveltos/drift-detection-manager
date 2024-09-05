@@ -179,7 +179,8 @@ var _ = Describe("ResourceSummary Reconciler", func() {
 
 		// Manager initialization is done within SetupManager. So test calls it directly here.
 		Expect(driftdetection.InitializeManager(watcherCtx, logger, testEnv.Config, testEnv.Client, scheme,
-			randomString(), randomString(), libsveltosv1beta1.ClusterTypeCapi, evaluateTimeout, false)).To(Succeed())
+			randomString(), randomString(), randomString(), libsveltosv1beta1.ClusterTypeCapi, evaluateTimeout,
+			false)).To(Succeed())
 
 		Expect(controllers.UpdateMapsAndResourceSummaryStatus(reconciler, context.TODO(), resourceSummary, logger)).To(Succeed())
 

@@ -63,7 +63,8 @@ var _ = Describe("Manager: registration", func() {
 		Expect(addTypeInformationToObject(scheme, &resource)).To(Succeed())
 
 		Expect(driftdetection.InitializeManager(watcherCtx, logger, testEnv.Config, testEnv.Client, scheme,
-			randomString(), randomString(), libsveltosv1beta1.ClusterTypeCapi, evaluateTimeout, false)).To(Succeed())
+			randomString(), randomString(), randomString(), libsveltosv1beta1.ClusterTypeCapi, evaluateTimeout,
+			false)).To(Succeed())
 		manager, err := driftdetection.GetManager()
 		Expect(err).To(BeNil())
 
@@ -127,7 +128,8 @@ var _ = Describe("Manager: registration", func() {
 
 	It("readResourceSummaries processes all existing ResourceSummaries", func() {
 		Expect(driftdetection.InitializeManager(watcherCtx, logger, testEnv.Config, testEnv.Client, scheme,
-			randomString(), randomString(), libsveltosv1beta1.ClusterTypeCapi, evaluateTimeout, false)).To(Succeed())
+			randomString(), randomString(), randomString(), libsveltosv1beta1.ClusterTypeCapi, evaluateTimeout,
+			false)).To(Succeed())
 		manager, err := driftdetection.GetManager()
 		Expect(err).To(BeNil())
 

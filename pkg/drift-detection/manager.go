@@ -114,7 +114,7 @@ type manager struct {
 
 // InitializeManager initializes a manager
 func InitializeManager(ctx context.Context, l logr.Logger, config *rest.Config, c client.Client,
-	scheme *runtime.Scheme, clusterNamespace, clusterName string, cluserType libsveltosv1beta1.ClusterType,
+	scheme *runtime.Scheme, clusterNamespace, clusterName, version string, cluserType libsveltosv1beta1.ClusterType,
 	intervalInSecond uint, sendUpdates bool) error {
 
 	if managerInstance == nil {
@@ -147,7 +147,12 @@ func InitializeManager(ctx context.Context, l logr.Logger, config *rest.Config, 
 				return err
 			}
 
-			go managerInstance.evaluateConfigurationDrift(ctx)
+			var wg sync.WaitGroup
+
+			go managerInstance.evaluateConfigurationDrift(ctx, &wg)
+			wg.Add(1)
+
+			go managerInstance.storeVersionForCompatibilityChecks(ctx, version, &wg)
 		}
 	}
 

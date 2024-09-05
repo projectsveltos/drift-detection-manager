@@ -25,6 +25,7 @@ import (
 
 //+kubebuilder:rbac:groups=lib.projectsveltos.io,resources=debuggingconfigurations,verbs=get;list;watch
 //+kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
+//+kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update
 
 func InitScheme() (*runtime.Scheme, error) {
 	s := runtime.NewScheme()

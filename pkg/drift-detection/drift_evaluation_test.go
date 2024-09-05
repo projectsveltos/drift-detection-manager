@@ -83,7 +83,8 @@ var _ = Describe("Manager: drift evaluation", func() {
 		logger := textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1)))
 
 		Expect(driftdetection.InitializeManager(watcherCtx, logger, testEnv.Config, testEnv.Client, scheme,
-			randomString(), randomString(), libsveltosv1beta1.ClusterTypeCapi, evaluateTimeout, false)).To(Succeed())
+			randomString(), randomString(), randomString(), libsveltosv1beta1.ClusterTypeCapi, evaluateTimeout,
+			false)).To(Succeed())
 		manager, err := driftdetection.GetManager()
 		Expect(err).To(BeNil())
 
@@ -197,7 +198,8 @@ var _ = Describe("Manager: drift evaluation", func() {
 		logger := textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1)))
 
 		Expect(driftdetection.InitializeManager(watcherCtx, logger, testEnv.Config, testEnv.Client, scheme,
-			randomString(), randomString(), libsveltosv1beta1.ClusterTypeCapi, evaluateTimeout, false)).To(Succeed())
+			randomString(), randomString(), randomString(), libsveltosv1beta1.ClusterTypeCapi, evaluateTimeout,
+			false)).To(Succeed())
 		manager, err := driftdetection.GetManager()
 		Expect(err).To(BeNil())
 
@@ -264,7 +266,8 @@ var _ = Describe("Manager: drift evaluation", func() {
 		logger := textlogger.NewLogger(textlogger.NewConfig(textlogger.Verbosity(1)))
 
 		Expect(driftdetection.InitializeManager(watcherCtx, logger, testEnv.Config, testEnv.Client, scheme,
-			randomString(), randomString(), libsveltosv1beta1.ClusterTypeCapi, evaluateTimeout, false)).To(Succeed())
+			randomString(), randomString(), randomString(), libsveltosv1beta1.ClusterTypeCapi, evaluateTimeout,
+			false)).To(Succeed())
 		manager, err := driftdetection.GetManager()
 		Expect(err).To(BeNil())
 
