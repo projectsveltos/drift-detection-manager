@@ -74,6 +74,7 @@ var (
 	webhookPort         int
 	syncPeriod          time.Duration
 	healthAddr          string
+	version             string
 )
 
 // Add RBAC for the authorized diagnostics endpoint.
@@ -174,41 +175,22 @@ func initFlags(fs *pflag.FlagSet) {
 	fs.BoolVar(&insecureDiagnostics, "insecure-diagnostics", false,
 		"Enable insecure diagnostics serving. For more details see the description of --diagnostics-address.")
 
-	flag.StringVar(
-		&runMode,
-		"run-mode",
-		noUpdates,
+	flag.StringVar(&runMode, "run-mode", noUpdates,
 		"indicates whether updates will be sent to management cluster or just created locally",
 	)
 
-	flag.StringVar(
-		&deployedCluster,
-		"current-cluster",
-		managedCluster,
+	flag.StringVar(&deployedCluster, "current-cluster", managedCluster,
 		"Indicate whether drift-detection-manager was deployed in the managed or the management cluster. "+
 			"Possible options are managed-cluster or management-cluster.",
 	)
 
-	flag.StringVar(
-		&clusterNamespace,
-		"cluster-namespace",
-		"",
-		"cluster namespace",
-	)
+	flag.StringVar(&clusterNamespace, "cluster-namespace", "", "cluster namespace")
 
-	flag.StringVar(
-		&clusterName,
-		"cluster-name",
-		"",
-		"cluster name",
-	)
+	flag.StringVar(&clusterName, "cluster-name", "", "cluster name")
 
-	flag.StringVar(
-		&clusterType,
-		"cluster-type",
-		"",
-		"cluster type",
-	)
+	flag.StringVar(&clusterType, "cluster-type", "", "cluster type")
+
+	flag.StringVar(&version, "version", "", "indicates sveltos-agent version")
 
 	fs.StringVar(&healthAddr, "health-addr", ":9440",
 		"The address the health endpoint binds to.")
@@ -254,10 +236,10 @@ func initializeManager(ctx context.Context, mgr ctrl.Manager, sendUpdates contro
 		var err error
 		if sendUpdates == controllers.SendUpdates {
 			err = driftdetection.InitializeManager(ctx, mgr.GetLogger(), mgr.GetConfig(), mgr.GetClient(), mgr.GetScheme(),
-				clusterNamespace, clusterName, clusterType, intervalInSecond, true)
+				clusterNamespace, clusterName, version, clusterType, intervalInSecond, true)
 		} else {
 			err = driftdetection.InitializeManager(ctx, mgr.GetLogger(), mgr.GetConfig(), mgr.GetClient(), mgr.GetScheme(),
-				clusterNamespace, clusterName, clusterType, intervalInSecond, false)
+				clusterNamespace, clusterName, version, clusterType, intervalInSecond, false)
 		}
 
 		if err != nil {
