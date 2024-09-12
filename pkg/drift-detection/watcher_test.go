@@ -56,7 +56,8 @@ var _ = Describe("Manager: react", func() {
 
 	It("react: queue resource to be evaluated for configuration drift", func() {
 		Expect(driftdetection.InitializeManager(watcherCtx, logger, testEnv.Config, testEnv.Client, scheme,
-			randomString(), randomString(), libsveltosv1beta1.ClusterTypeCapi, evaluateTimeout, false)).To(Succeed())
+			randomString(), randomString(), randomString(), libsveltosv1beta1.ClusterTypeCapi, evaluateTimeout,
+			false)).To(Succeed())
 		manager, err := driftdetection.GetManager()
 		Expect(err).To(BeNil())
 
