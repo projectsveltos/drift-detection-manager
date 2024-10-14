@@ -38,7 +38,7 @@ import (
 )
 
 const (
-	evaluateTimeout = 120 * 60 // high as we never want to see it
+	evaluateTimeout = int64(120 * 60) // high as we never want to see it
 )
 
 var _ = Describe("ResourceSummary Reconciler", func() {
