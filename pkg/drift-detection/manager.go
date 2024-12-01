@@ -115,7 +115,7 @@ type manager struct {
 // InitializeManager initializes a manager
 func InitializeManager(ctx context.Context, l logr.Logger, config *rest.Config, c client.Client,
 	scheme *runtime.Scheme, clusterNamespace, clusterName, version string, cluserType libsveltosv1beta1.ClusterType,
-	intervalInSecond uint, sendUpdates bool) error {
+	intervalInSecond int64, sendUpdates bool) error {
 
 	if managerInstance == nil {
 		getManagerLock.Lock()
