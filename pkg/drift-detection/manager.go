@@ -38,10 +38,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
+	"github.com/projectsveltos/libsveltos/lib/k8s_utils"
 	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
 	"github.com/projectsveltos/libsveltos/lib/patcher"
 	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
-	"github.com/projectsveltos/libsveltos/lib/utils"
 )
 
 type ResourceType int
@@ -335,7 +335,7 @@ func (m *manager) getUnstructured(ctx context.Context, resourceRef *corev1.Objec
 
 	gvk := resourceRef.GroupVersionKind()
 
-	dr, err := utils.GetDynamicResourceInterface(m.config, gvk, resourceRef.Namespace)
+	dr, err := k8s_utils.GetDynamicResourceInterface(m.config, gvk, resourceRef.Namespace)
 	if err != nil {
 		return nil, err
 	}

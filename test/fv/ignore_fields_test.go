@@ -31,7 +31,7 @@ import (
 	"k8s.io/client-go/util/retry"
 
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
-	"github.com/projectsveltos/libsveltos/lib/utils"
+	"github.com/projectsveltos/libsveltos/lib/k8s_utils"
 )
 
 const (
@@ -74,7 +74,7 @@ var _ = Describe("Start watcher", Label("FV"), func() {
 
 		deplName := randomString()
 		By(fmt.Sprintf("Create deployment %s/%s", namespace.Name, deplName))
-		deployment, err := utils.GetUnstructured([]byte(fmt.Sprintf(nginxDepl, namespace.Name, deplName)))
+		deployment, err := k8s_utils.GetUnstructured([]byte(fmt.Sprintf(nginxDepl, namespace.Name, deplName)))
 		Expect(err).To(BeNil())
 		Expect(k8sClient.Create(context.TODO(), deployment))
 		Expect(addTypeInformationToObject(scheme, deployment)).To(Succeed())
