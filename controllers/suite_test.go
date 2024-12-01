@@ -42,7 +42,7 @@ import (
 	"github.com/projectsveltos/drift-detection-manager/internal/test/helpers"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	"github.com/projectsveltos/libsveltos/lib/crd"
-	"github.com/projectsveltos/libsveltos/lib/utils"
+	"github.com/projectsveltos/libsveltos/lib/k8s_utils"
 )
 
 var (
@@ -91,12 +91,12 @@ var _ = BeforeSuite(func() {
 		}
 	}()
 
-	resourceSummaryCRD, err := utils.GetUnstructured(crd.GetResourceSummaryCRDYAML())
+	resourceSummaryCRD, err := k8s_utils.GetUnstructured(crd.GetResourceSummaryCRDYAML())
 	Expect(err).To(BeNil())
 	Expect(testEnv.Create(ctx, resourceSummaryCRD)).To(Succeed())
 	Expect(waitForObject(ctx, testEnv.Client, resourceSummaryCRD)).To(Succeed())
 
-	dcCRD, err := utils.GetUnstructured(crd.GetDebuggingConfigurationCRDYAML())
+	dcCRD, err := k8s_utils.GetUnstructured(crd.GetDebuggingConfigurationCRDYAML())
 	Expect(err).To(BeNil())
 	Expect(testEnv.Create(ctx, dcCRD)).To(Succeed())
 	Expect(waitForObject(ctx, testEnv.Client, dcCRD)).To(Succeed())
