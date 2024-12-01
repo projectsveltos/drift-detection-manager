@@ -18,4 +18,4 @@ spec:
         - "--cluster-type="
         - "--current-cluster=managed-cluster"
         - "--run-mode=do-not-send-updates"
-        - "--version=main"
+        - "--version=v0.43.0"
