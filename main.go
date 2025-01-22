@@ -29,6 +29,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/spf13/pflag"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -36,11 +37,14 @@ import (
 	cliflag "k8s.io/component-base/cli/flag"
 	"k8s.io/klog/v2"
 	"k8s.io/klog/v2/textlogger"
+	"k8s.io/utils/ptr"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -49,7 +53,9 @@ import (
 	driftdetection "github.com/projectsveltos/drift-detection-manager/pkg/drift-detection"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	"github.com/projectsveltos/libsveltos/lib/clusterproxy"
+	"github.com/projectsveltos/libsveltos/lib/k8s_utils"
 	"github.com/projectsveltos/libsveltos/lib/logsettings"
+	logs "github.com/projectsveltos/libsveltos/lib/logsettings"
 	libsveltosset "github.com/projectsveltos/libsveltos/lib/set"
 	//+kubebuilder:scaffold:imports
 )
@@ -97,72 +103,82 @@ func main() {
 	ctrl.SetLogger(klog.Background())
 
 	ctx := ctrl.SetupSignalHandler()
+	registerForLogSettings(ctx, ctrl.Log.WithName("log-setter"))
 
-	ctrlOptions := ctrl.Options{
-		Scheme:                 scheme,
-		Metrics:                getDiagnosticsOptions(),
-		HealthProbeBindAddress: healthAddr,
-		WebhookServer: webhook.NewServer(
-			webhook.Options{
-				Port: webhookPort,
-			}),
-		Cache: cache.Options{
-			SyncPeriod: &syncPeriod,
-		},
-	}
+	// If it is running in the management cluster, the token to access the managed
+	// cluster can expire and be renewed. In such a case, it is needed to create a new manager,
+	// start again all controllers and the evaluation manager.
+	// A context with a Done channel is created and if we detect the token has expired (by
+	// getting unathorized errors), the context channel is closed which terminates the manager
+	// and the evaluation manager.
+	for {
+		ctxWithCancel, cancel := context.WithCancel(ctx)
+		restConfig := ctrl.GetConfigOrDie()
+		if deployedCluster != managedCluster {
+			// if sveltos-agent is running in the management cluster, get the kubeconfig
+			// of the managed cluster
+			restConfig = getManagedClusterRestConfig(ctxWithCancel, restConfig, ctrl.Log.WithName("get-kubeconfig"))
+		}
+		restConfig.QPS = restConfigQPS
+		restConfig.Burst = restConfigBurst
 
-	restConfig := ctrl.GetConfigOrDie()
-	if deployedCluster != managedCluster {
-		// if drift-detection-manager is running in the management cluster, get the kubeconfig
-		// of the managed cluster
-		restConfig = getManagedClusterRestConfig(ctx, restConfig, ctrl.Log.WithName("get-kubeconfig"))
-	}
-	restConfig.QPS = restConfigQPS
-	restConfig.Burst = restConfigBurst
+		ctrlOptions := ctrl.Options{
+			Scheme:                 scheme,
+			Metrics:                getDiagnosticsOptions(),
+			HealthProbeBindAddress: healthAddr,
+			WebhookServer: webhook.NewServer(
+				webhook.Options{
+					Port: webhookPort,
+				}),
+			Cache: cache.Options{
+				SyncPeriod: &syncPeriod,
+			},
+			Controller: config.Controller{
+				// This is needed to avoid the controller with name xyz already exists
+				SkipNameValidation: ptr.To(true),
+			},
+		}
 
-	mgr, err := ctrl.NewManager(restConfig, ctrlOptions)
-	if err != nil {
-		setupLog.Error(err, "unable to start manager")
-		os.Exit(1)
-	}
+		mgr, err := ctrl.NewManager(restConfig, ctrlOptions)
+		if err != nil {
+			setupLog.Error(err, "unable to start manager")
+			os.Exit(1)
+		}
 
-	logsettings.RegisterForLogSettings(ctx,
-		libsveltosv1beta1.ComponentDriftDetectionManager, ctrl.Log.WithName("log-setter"),
-		restConfig)
+		sendUpdates := controllers.SendUpdates // do not send reports
+		if runMode == noUpdates {
+			sendUpdates = controllers.DoNotSendUpdates
+		}
 
-	sendUpdates := controllers.SendUpdates // do not send reports
-	if runMode == noUpdates {
-		sendUpdates = controllers.DoNotSendUpdates
-	}
+		if err = getResourceSummaryReconcilier(mgr, sendUpdates).SetupWithManager(ctxWithCancel, mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "ResourceSummary")
+			os.Exit(1)
+		}
+		//+kubebuilder:scaffold:builder
 
-	if err = (&controllers.ResourceSummaryReconciler{
-		Client:                      mgr.GetClient(),
-		Config:                      mgr.GetConfig(),
-		Scheme:                      mgr.GetScheme(),
-		RunMode:                     sendUpdates,
-		Mux:                         sync.RWMutex{},
-		ResourceSummaryMap:          make(map[corev1.ObjectReference]*libsveltosset.Set),
-		HelmResourceSummaryMap:      make(map[corev1.ObjectReference]*libsveltosset.Set),
-		KustomizeResourceSummaryMap: make(map[corev1.ObjectReference]*libsveltosset.Set),
-		ClusterNamespace:            clusterNamespace,
-		ClusterName:                 clusterName,
-		ClusterType:                 libsveltosv1beta1.ClusterType(clusterType),
-		MapperLock:                  sync.Mutex{},
-	}).SetupWithManager(ctx, mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "ResourceSummary")
-		os.Exit(1)
-	}
-	//+kubebuilder:scaffold:builder
+		if deployedCluster != managedCluster {
+			// if sveltos-agent is running in the management cluster, get the kubeconfig
+			// of the managed cluster
+			go restartIfNeeded(ctxWithCancel, cancel, restConfig, ctrl.Log.WithName("restarter"))
+		}
 
-	setupChecks(mgr)
+		setupChecks(mgr)
 
-	go initializeManager(ctx, mgr, sendUpdates, clusterNamespace, clusterName,
-		libsveltosv1beta1.ClusterType(clusterType), setupLog)
+		go initializeManager(ctxWithCancel, mgr, sendUpdates, clusterNamespace, clusterName,
+			libsveltosv1beta1.ClusterType(clusterType), setupLog)
 
-	setupLog.Info("starting manager")
-	if err := mgr.Start(ctx); err != nil {
-		setupLog.Error(err, "problem running manager")
-		os.Exit(1)
+		setupLog.Info("starting manager")
+		if err := mgr.Start(ctxWithCancel); err != nil {
+			setupLog.Error(err, "problem running manager")
+			os.Exit(1)
+		}
+
+		driftDetectionMgr, err := driftdetection.GetManager()
+		if err != nil {
+			setupLog.Error(err, "failed to reset driftdetection manager")
+			os.Exit(1)
+		}
+		driftDetectionMgr.Reset()
 	}
 }
 
@@ -307,5 +323,44 @@ func getDiagnosticsOptions() metricsserver.Options {
 		BindAddress:    diagnosticsAddress,
 		SecureServing:  true,
 		FilterProvider: filters.WithAuthenticationAndAuthorization,
+	}
+}
+
+func restartIfNeeded(ctx context.Context, cancel context.CancelFunc, restConfig *rest.Config, logger logr.Logger) {
+	for {
+		const interval = 10 * time.Second
+		time.Sleep(interval)
+		_, err := k8s_utils.GetKubernetesVersion(ctx, restConfig, logger)
+		if apierrors.IsUnauthorized(err) || apierrors.IsForbidden(err) {
+			logger.V(logs.LogInfo).Info(fmt.Sprintf("IsUnauthorized/IsForbidden %v. Cancel context", err))
+			cancel()
+			break
+		}
+	}
+}
+
+func registerForLogSettings(ctx context.Context, logger logr.Logger) {
+	restConfig := ctrl.GetConfigOrDie()
+	logsettings.RegisterForLogSettings(ctx,
+		libsveltosv1beta1.ComponentDriftDetectionManager, logger,
+		restConfig)
+}
+
+func getResourceSummaryReconcilier(mgr manager.Manager, sendUpdates controllers.Mode,
+) *controllers.ResourceSummaryReconciler {
+
+	return &controllers.ResourceSummaryReconciler{
+		Client:                      mgr.GetClient(),
+		Config:                      mgr.GetConfig(),
+		Scheme:                      mgr.GetScheme(),
+		RunMode:                     sendUpdates,
+		Mux:                         sync.RWMutex{},
+		ResourceSummaryMap:          make(map[corev1.ObjectReference]*libsveltosset.Set),
+		HelmResourceSummaryMap:      make(map[corev1.ObjectReference]*libsveltosset.Set),
+		KustomizeResourceSummaryMap: make(map[corev1.ObjectReference]*libsveltosset.Set),
+		ClusterNamespace:            clusterNamespace,
+		ClusterName:                 clusterName,
+		ClusterType:                 libsveltosv1beta1.ClusterType(clusterType),
+		MapperLock:                  sync.Mutex{},
 	}
 }

@@ -42,45 +42,51 @@ func (m *manager) evaluateConfigurationDrift(ctx context.Context, wg *sync.WaitG
 	var once sync.Once
 
 	for {
-		// Sleep before next evaluation
-		time.Sleep(m.interval)
+		select {
+		case <-ctx.Done():
+			m.log.V(logs.LogInfo).Info("Context canceled. Exiting evaluation.")
+			return // Exit the goroutine
+		default:
+			// Sleep before next evaluation
+			time.Sleep(m.interval)
 
-		m.log.V(logs.LogDebug).Info("Evaluating Configuration drift")
+			m.log.V(logs.LogDebug).Info("Evaluating Configuration drift")
 
-		m.mu.RLock()
-		// Get current queued resources
-		resources := m.jobQueue.Items()
-		// Reset current queue
-		m.jobQueue = &libsveltosset.Set{}
-		m.mu.RUnlock()
+			m.mu.RLock()
+			// Get current queued resources
+			resources := m.jobQueue.Items()
+			// Reset current queue
+			m.jobQueue = &libsveltosset.Set{}
+			m.mu.RUnlock()
 
-		failedEvaluations := &libsveltosset.Set{}
+			failedEvaluations := &libsveltosset.Set{}
 
-		for i := range resources {
-			logger := m.log.WithValues("resource", fmt.Sprintf("%s/%s", resources[i].Namespace, resources[i].Name))
-			logger = logger.WithValues("gvk", resources[i].GroupVersionKind())
-			logger.V(logs.LogDebug).Info("Evaluating resource for configuration drift")
-			err := m.evaluateResource(ctx, &resources[i])
-			if err != nil {
-				logger.V(logs.LogInfo).Error(err, "failed to evaluate resource")
-				failedEvaluations.Insert(&resources[i])
+			for i := range resources {
+				logger := m.log.WithValues("resource", fmt.Sprintf("%s/%s", resources[i].Namespace, resources[i].Name))
+				logger = logger.WithValues("gvk", resources[i].GroupVersionKind())
+				logger.V(logs.LogDebug).Info("Evaluating resource for configuration drift")
+				err := m.evaluateResource(ctx, &resources[i])
+				if err != nil {
+					logger.V(logs.LogInfo).Error(err, "failed to evaluate resource")
+					failedEvaluations.Insert(&resources[i])
+				}
 			}
-		}
 
-		// Re-queue all resources whose evaluation failed
-		resources = failedEvaluations.Items()
-		for i := range failedEvaluations.Items() {
-			logger := m.log.WithValues("resource", fmt.Sprintf("%s/%s", resources[i].Namespace, resources[i].Name))
-			logger = logger.WithValues("gvk", resources[i].GroupVersionKind())
-			logger.V(logs.LogDebug).Info("requeuing resource for evaluation")
-			m.mu.Lock()
-			m.checkForConfigurationDrift(&resources[i])
-			m.mu.Unlock()
-		}
+			// Re-queue all resources whose evaluation failed
+			resources = failedEvaluations.Items()
+			for i := range failedEvaluations.Items() {
+				logger := m.log.WithValues("resource", fmt.Sprintf("%s/%s", resources[i].Namespace, resources[i].Name))
+				logger = logger.WithValues("gvk", resources[i].GroupVersionKind())
+				logger.V(logs.LogDebug).Info("requeuing resource for evaluation")
+				m.mu.Lock()
+				m.checkForConfigurationDrift(&resources[i])
+				m.mu.Unlock()
+			}
 
-		once.Do(func() {
-			wg.Done()
-		})
+			once.Do(func() {
+				wg.Done()
+			})
+		}
 	}
 }
 
