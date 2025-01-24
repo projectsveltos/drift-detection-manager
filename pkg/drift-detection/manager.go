@@ -162,10 +162,18 @@ func InitializeManager(ctx context.Context, l logr.Logger, config *rest.Config, 
 // GetManager returns the manager instance implementing the ClassifierInterface.
 // Returns nil if manager has not been initialized yet
 func GetManager() (*manager, error) {
+	getManagerLock.Lock()
+	defer getManagerLock.Unlock()
 	if managerInstance != nil {
 		return managerInstance, nil
 	}
 	return nil, fmt.Errorf("manager not initialized yet")
+}
+
+func (m *manager) Reset() {
+	getManagerLock.Lock()
+	defer getManagerLock.Unlock()
+	managerInstance = nil
 }
 
 // RegisterResource requests manager to track a resource for possible drift changes.
